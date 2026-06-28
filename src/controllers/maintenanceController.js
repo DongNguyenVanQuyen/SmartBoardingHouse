@@ -1,5 +1,6 @@
 const MaintenanceRequest = require("../models/MaintenanceRequest");
 const Contract = require("../models/Contract");
+const Room = require("../models/Room");
 const Notification = require("../models/Notification");
 const { success, error: sendError } = require("../utils/response");
 
@@ -23,9 +24,18 @@ const createRequest = async (req, res) => {
 
     const images = req.files ? req.files.map((f) => f.path) : [];
 
+    const room = await Room.findById(contract.room);
+    const count = await MaintenanceRequest.countDocuments({
+      room: contract.room,
+    });
+    const requestNumber = `MT-${room?.roomNumber || "NA"}-${String(count + 1).padStart(3, "0")}`;
+
     const created = await MaintenanceRequest.create({
+      requestNumber,
       tenant: req.user._id,
       room: contract.room,
+      roomNumber: room?.roomNumber,
+      tenantName: req.user.fullName,
       title,
       description,
       priority: priority || "medium",

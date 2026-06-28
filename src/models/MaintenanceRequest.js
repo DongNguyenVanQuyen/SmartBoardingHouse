@@ -3,12 +3,15 @@ const mongoose = require("mongoose");
 
 const maintenanceRequestSchema = new mongoose.Schema(
   {
+    requestNumber: { type: String, required: true, unique: true, trim: true },
     tenant: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Tenant",
       required: true,
     },
     room: { type: mongoose.Schema.Types.ObjectId, ref: "Room", required: true },
+    roomNumber: { type: String }, // cache hiển thị cho Admin
+    tenantName: { type: String }, // cache hiển thị cho Admin
     title: { type: String, required: true, trim: true },
     description: { type: String, required: true },
     images: [{ type: String }], // Cloudinary URLs

@@ -11,12 +11,14 @@ const Payment = require("./src/models/Payment");
 const MeterReading = require("./src/models/MeterReading");
 const MaintenanceRequest = require("./src/models/MaintenanceRequest");
 
-const TENANT_ID = "6a26702c2d0a33dd1c7d761a";
+const TENANT_ID = "6a3e4a05e20f53cbb7da4e7b";
 
 async function seedData() {
   try {
-    await mongoose.connect(process.env.MONGO_URI);
-    console.log("MongoDB Connected");
+    await mongoose.connect(process.env.MONGO_URI, {
+      dbName: "SmartBoardingHouse", // khớp database bên Admin (.NET)
+    });
+    console.log("MongoDB Connected -> DB:", mongoose.connection.name);
 
     // 1. Create Floor (Tầng 2)
     const floor = await Floor.findOneAndUpdate(
@@ -37,6 +39,7 @@ async function seedData() {
         roomNumber: "1",
         floor: floor._id,
         price: 3000000, // 3 triệu/tháng
+        roomDeposit: 6000000, // tiền cọc khi nhận phòng
         area: 25,
         maxOccupants: 2,
         status: "occupied",
@@ -55,10 +58,14 @@ async function seedData() {
         room: room._id,
       },
       {
+        contractNumber: `HD-${room.roomNumber}-2022`,
         tenant: TENANT_ID,
         room: room._id,
+        tenantName: "", // sẽ populate / cập nhật khi có tên thật của tenant
+        roomNumber: room.roomNumber,
         startDate: new Date("2022-12-01"),
         endDate: new Date("2026-12-01"),
+        paymentDate: 1, // thu tiền ngày 1 hàng tháng
         deposit: 6000000, // 2 tháng
         monthlyRent: 3000000,
         status: "active",
@@ -74,8 +81,15 @@ async function seedData() {
     for (let year = 2023; year <= 2026; year++) {
       for (let month = 1; month <= 12; month++) {
         const dueDate = new Date(year, month - 1, 15);
-        const electricCost = 150000 + Math.random() * 100000;
-        const waterCost = 80000 + Math.random() * 50000;
+        const electricUsage = Math.round(40 + Math.random() * 30); // kWh
+        const waterUsage = Math.round(8 + Math.random() * 6); // m3
+        const electricPrice = 3500;
+        const waterPrice = 8000;
+        const electricCost = electricUsage * electricPrice;
+        const waterCost = waterUsage * waterPrice;
+        const isPaid = Math.random() > 0.3;
+        const totalAmount = 3000000 + electricCost + waterCost;
+        const invoiceNumber = `INV-${room.roomNumber}-${year}${String(month).padStart(2, "0")}`;
 
         const invoice = await Invoice.findOneAndUpdate(
           {
@@ -85,38 +99,24 @@ async function seedData() {
             year,
           },
           {
+            invoiceNumber,
             tenant: TENANT_ID,
             room: room._id,
             contract: contract._id,
+            roomNumber: room.roomNumber,
             month,
             year,
             dueDate,
-            items: [
-              {
-                name: "Tiền phòng",
-                quantity: 1,
-                unitPrice: 3000000,
-                total: 3000000,
-              },
-              {
-                name: "Tiền điện",
-                quantity: 1,
-                unitPrice: electricCost,
-                total: Math.round(electricCost),
-              },
-              {
-                name: "Tiền nước",
-                quantity: 1,
-                unitPrice: waterCost,
-                total: Math.round(waterCost),
-              },
-            ],
-            totalAmount: 3000000 + Math.round(electricCost + waterCost),
-            paidAmount:
-              Math.random() > 0.3
-                ? 3000000 + Math.round(electricCost + waterCost)
-                : 0,
-            status: Math.random() > 0.3 ? "paid" : "unpaid",
+            roomPrice: 3000000,
+            electricUsage,
+            electricPrice,
+            waterUsage,
+            waterPrice,
+            serviceFee: 0,
+            items: [], // không có phụ phí phát sinh trong data mẫu này
+            totalAmount,
+            paidAmount: isPaid ? totalAmount : 0,
+            status: isPaid ? "paid" : "unpaid",
             note: `Hóa đơn tháng ${month}/${year}`,
           },
           { upsert: true, new: true },
@@ -129,7 +129,7 @@ async function seedData() {
     // 5. Create Payments for invoices
     for (const invoice of invoices) {
       if (invoice.status === "paid" && invoice.paidAmount > 0) {
-        const payment = await Payment.findOneAndUpdate(
+        await Payment.findOneAndUpdate(
           {
             tenant: TENANT_ID,
             invoice: invoice._id,
@@ -163,7 +163,7 @@ async function seedData() {
         const currentElectricReading =
           prevElectricReading + Math.floor(Math.random() * 300) + 50;
 
-        const electricReading = await MeterReading.findOneAndUpdate(
+        await MeterReading.findOneAndUpdate(
           {
             tenant: TENANT_ID,
             room: room._id,
@@ -174,6 +174,7 @@ async function seedData() {
           {
             tenant: TENANT_ID,
             room: room._id,
+            roomNumber: room.roomNumber,
             type: "electric",
             currentReading: currentElectricReading,
             previousReading: prevElectricReading,
@@ -193,7 +194,7 @@ async function seedData() {
         const currentWaterReading =
           prevWaterReading + Math.floor(Math.random() * 50) + 10;
 
-        const waterReading = await MeterReading.findOneAndUpdate(
+        await MeterReading.findOneAndUpdate(
           {
             tenant: TENANT_ID,
             room: room._id,
@@ -204,6 +205,7 @@ async function seedData() {
           {
             tenant: TENANT_ID,
             room: room._id,
+            roomNumber: room.roomNumber,
             type: "water",
             currentReading: currentWaterReading,
             previousReading: prevWaterReading,
@@ -255,14 +257,17 @@ async function seedData() {
 
     const maintenanceRequests = [];
     for (let i = 0; i < maintenanceData.length; i++) {
+      const requestNumber = `MT-${room.roomNumber}-${String(i + 1).padStart(3, "0")}`;
       const maintenance = await MaintenanceRequest.findOneAndUpdate(
         {
           tenant: TENANT_ID,
           title: maintenanceData[i].title,
         },
         {
+          requestNumber,
           tenant: TENANT_ID,
           room: room._id,
+          roomNumber: room.roomNumber,
           ...maintenanceData[i],
           resolvedAt:
             maintenanceData[i].status === "completed"

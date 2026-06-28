@@ -9,6 +9,7 @@ const meterReadingSchema = new mongoose.Schema(
       required: true,
     },
     room: { type: mongoose.Schema.Types.ObjectId, ref: "Room", required: true },
+    roomNumber: { type: String }, // cache hiển thị cho Admin
     type: { type: String, enum: ["electric", "water"], required: true },
     currentReading: { type: Number, required: true }, // Chỉ số hiện tại
     previousReading: { type: Number, default: 0 }, // Chỉ số trước
@@ -25,15 +26,15 @@ const meterReadingSchema = new mongoose.Schema(
   { timestamps: true },
 );
 
-// Tự tính usage và totalCost
-meterReadingSchema.pre("save", function (next) {
+// Tự tính usage và totalCost (Mongoose 7+ không còn hỗ trợ callback "next",
+// hook đồng bộ chỉ cần không nhận tham số và không gọi next())
+meterReadingSchema.pre("save", function () {
   if (this.currentReading != null && this.previousReading != null) {
     this.usage = this.currentReading - this.previousReading;
   }
   if (this.usage != null && this.unitPrice != null) {
     this.totalCost = this.usage * this.unitPrice;
   }
-  next();
 });
 
 module.exports = mongoose.model("MeterReading", meterReadingSchema);

@@ -30,6 +30,21 @@ const meterStorage = new CloudinaryStorage({
   },
 });
 
+// Storage riêng cho ảnh công tơ điện/nước
+const meterReadingStorage = new CloudinaryStorage({
+  cloudinary,
+  params: {
+    folder: "smartboarding/meter-readings",
+    allowed_formats: ["jpg", "jpeg", "png", "webp"],
+    transformation: [{ width: 1280, crop: "limit" }], // ảnh công tơ không cần quá to
+  },
+});
+
+const uploadMeterReading = multer({
+  storage: meterReadingStorage,
+  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB
+});
+
 // Storage cho ảnh sửa chữa
 const maintenanceStorage = new CloudinaryStorage({
   cloudinary,
@@ -55,4 +70,10 @@ const uploadMaintenance = multer({
   limits: { fileSize: 10 * 1024 * 1024 },
 });
 
-module.exports = { cloudinary, uploadAvatar, uploadMeter, uploadMaintenance };
+module.exports = {
+  cloudinary,
+  uploadAvatar,
+  uploadMeter,
+  uploadMaintenance,
+  uploadMeterReading,
+};

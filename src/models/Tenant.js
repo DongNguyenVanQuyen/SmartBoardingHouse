@@ -18,7 +18,16 @@ const tenantSchema = new mongoose.Schema(
     idCard: { type: String, trim: true },
     dateOfBirth: { type: Date },
     address: { type: String, trim: true },
+    // Cache phòng hiện tại để Admin hiển thị nhanh, không cần populate.
+    // Nguồn sự thật vẫn là Room.tenant (ref ngược).
+    room: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Room",
+      default: null,
+    },
+    roomNumber: { type: String, default: null }, // cache, đồng bộ khi gán/đổi phòng
     refreshToken: { type: String, default: null },
+    refreshTokenExpiry: { type: Date, default: null },
     fcmToken: { type: String, default: null }, // Firebase FCM
     isActive: { type: Boolean, default: true },
   },
@@ -44,4 +53,4 @@ tenantSchema.methods.toJSON = function () {
   return obj;
 };
 
-module.exports = mongoose.model("Tenant", tenantSchema);
+module.exports = mongoose.model("Tenant", tenantSchema, "Users");

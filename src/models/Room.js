@@ -10,6 +10,7 @@ const roomSchema = new mongoose.Schema(
       required: true,
     },
     price: { type: Number, required: true }, // Giá thuê/tháng
+    roomDeposit: { type: Number, default: 0 }, // Tiền cọc khi nhận phòng
     area: { type: Number }, // m²
     maxOccupants: { type: Number, default: 2 },
     status: {

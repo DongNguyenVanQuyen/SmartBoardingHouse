@@ -56,28 +56,50 @@ const generateInvoice = async (tenantId, roomId, month, year) => {
 
   // luôn tính lại totalAmount = tiền phòng + điện + nước
   const totalAmount = rentAmount + electricAmount + waterAmount;
+
+  // Các field chi tiết khớp model mới (để Admin/.NET đọc đúng số liệu,
+  // không phải suy ra từ items nữa)
+  const detailFields = {
+    roomPrice: rentAmount,
+    electricUsage: electricReading ? electricReading.usage : 0,
+    electricPrice: electricReading ? electricReading.unitPrice : 0,
+    waterUsage: waterReading ? waterReading.usage : 0,
+    waterPrice: waterReading ? waterReading.unitPrice : 0,
+    serviceFee: 0,
+  };
+
   console.log(
     `Generating invoice for tenant ${tenantId}, room ${roomId}, month ${month}, year ${year}`,
   );
   console.log(
     `Rent: ${rentAmount}, Electric: ${electricAmount}, Water: ${waterAmount}, Total: ${totalAmount}`,
   );
-  let invoice = await Invoice.findOne({ tenant: tenantId, month, year });
+
+  let invoice = await Invoice.findOne({
+    tenant: tenantId,
+    room: roomId,
+    month,
+    year,
+  });
 
   if (invoice) {
     invoice.items = items;
-    invoice.totalAmount = totalAmount; // <-- trước đây bị thiếu, nên số tiền không khớp items
+    Object.assign(invoice, detailFields);
+    invoice.totalAmount = totalAmount;
     await invoice.save();
     return invoice;
   } else {
     return await Invoice.create({
+      invoiceNumber: `INV-${room.roomNumber}-${year}${String(month).padStart(2, "0")}`,
       tenant: tenantId,
       room: roomId,
+      roomNumber: room.roomNumber,
       month,
       year,
       dueDate: new Date(year, month - 1, 25),
       items,
-      totalAmount, // <-- thêm khi tạo mới
+      ...detailFields,
+      totalAmount,
     });
   }
 };
