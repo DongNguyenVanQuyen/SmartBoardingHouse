@@ -3,46 +3,109 @@ const MeterReading = require("../models/MeterReading");
 const { generateInvoice } = require("../services/invoiceService");
 const Contract = require("../models/Contract");
 const { success, error: sendError } = require("../utils/response");
+const axios = require("axios");
 
-const Tesseract = require("tesseract.js");
+// Dùng key 1, nếu lỗi quota/rate-limit thì fallback sang key 2
+const GEMINI_KEYS = [
+  process.env.GEMINI_API_KEY,
+  process.env.GEMINI_API_KEY_2,
+].filter(Boolean);
 
-// OCR thật bằng Tesseract.js — đọc text từ ảnh, tách số có nhiều chữ số nhất
-// (chỉ số công tơ thường là số dài nhất trong ảnh, các số khác như điện áp "220V",
-// tần số "50Hz", năm sản xuất... thường ngắn hơn)
-const runOCR = async (imageUrl) => {
-  const { data } = await Tesseract.recognize(imageUrl, "eng");
-  const rawText = (data.text || "").trim();
+// env đặt tên "gemini-3-flash-preview" nhưng model thật trên AI Studio là "gemini-2.5-flash"
+// (gemini-3 chưa public) → fallback an toàn
+const GEMINI_MODEL = process.env.GEMINI_MODEL_NAME || "gemini-2.5-flash";
 
-  // Tách các chuỗi số (cho phép số thập phân, vd "9985.3")
-  const matches = rawText.match(/\d+(\.\d+)?/g) || [];
+// ─── Gemini OCR ────────────────────────────────────────────────────────────────
+const runGeminiOCR = async (imageUrl) => {
+  if (!GEMINI_KEYS.length)
+    throw new Error("Chưa cấu hình GEMINI_API_KEY trong .env");
 
-  let best = null;
-  for (const m of matches) {
-    const digitCount = m.replace(".", "").length;
-    if (!best || digitCount > best.digitCount) {
-      best = { value: m, digitCount };
+  // Tải ảnh về buffer rồi gửi base64 cho Gemini
+  const { data: imageBuffer } = await axios.get(imageUrl, {
+    responseType: "arraybuffer",
+  });
+  const base64Image = Buffer.from(imageBuffer).toString("base64");
+
+  const body = {
+    contents: [
+      {
+        parts: [
+          {
+            text:
+              "Đây là ảnh công tơ điện hoặc nước. " +
+              "Hãy đọc CHÍNH XÁC số chỉ số tiêu thụ hiển thị trên màn LCD hoặc mặt số cơ. " +
+              "KHÔNG đọc điện áp (220V), tần số (50Hz), mã sản xuất, hay số in trên thân công tơ. " +
+              "Nếu có dấu thập phân thì giữ nguyên (vd: 9985.3). " +
+              "Nếu không đọc rõ, trả reading = null. " +
+              'Trả về JSON: { "reading": <number|null>, "note": "<mô tả ngắn>" }',
+          },
+          { inline_data: { mime_type: "image/jpeg", data: base64Image } },
+        ],
+      },
+    ],
+    generationConfig: {
+      responseMimeType: "application/json",
+      responseSchema: {
+        type: "object",
+        properties: {
+          reading: { type: "number", nullable: true },
+          note: { type: "string" },
+        },
+        required: ["reading"],
+      },
+    },
+  };
+
+  let lastError;
+  for (const key of GEMINI_KEYS) {
+    try {
+      const res = await axios.post(
+        `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${key}`,
+        body,
+        { timeout: 30000 },
+      );
+
+      const textPart =
+        res.data?.candidates?.[0]?.content?.parts?.[0]?.text || "";
+      let parsed = {};
+      try {
+        parsed = JSON.parse(textPart);
+      } catch {
+        /* bỏ qua */
+      }
+
+      return {
+        rawText: textPart.slice(0, 500),
+        suggestedReading:
+          typeof parsed.reading === "number" ? parsed.reading : null,
+        note: parsed.note || "",
+      };
+    } catch (err) {
+      lastError = err.response?.data?.error?.message || err.message;
+      // Thử key tiếp theo nếu lỗi 429 (quota) hoặc 403
+      const status = err.response?.status;
+      if (status !== 429 && status !== 403)
+        throw new Error(`Gemini error: ${lastError}`);
     }
   }
-
-  return {
-    rawText: rawText.slice(0, 500), // tránh lưu quá dài vào DB
-    suggestedReading: best ? parseFloat(best.value) : null,
-  };
+  throw new Error(`Gemini error (cả 2 key đều lỗi): ${lastError}`);
 };
 
-// Helper: tìm chỉ số kỳ gần nhất trước tháng/năm hiện tại (dùng chung cho cả 2 API dưới)
+// ─── Helper ────────────────────────────────────────────────────────────────────
 const findPreviousReading = async (roomId, type, month, year) => {
-  const lastReading = await MeterReading.findOne({
+  const last = await MeterReading.findOne({
     room: roomId,
     type,
     $or: [{ year, month: { $lt: month } }, { year: { $lt: year } }],
   }).sort({ year: -1, month: -1 });
-
-  return lastReading ? lastReading.currentReading : 0;
+  return last ? last.currentReading : 0;
 };
 
-// GET /meter-readings/previous?type=electric
-// Hiển thị sẵn chỉ số tháng trước khi mở form, KHÔNG cho sửa
+const getCurrentMonthReading = async (roomId, type, month, year) =>
+  MeterReading.findOne({ room: roomId, type, month, year });
+
+// ─── GET /meter-readings/previous?type=electric ────────────────────────────────
+// Lấy chỉ số kỳ trước hiển thị sẵn khi mở form — không cho sửa
 const getPreviousReading = async (req, res) => {
   try {
     const { type } = req.query;
@@ -60,20 +123,10 @@ const getPreviousReading = async (req, res) => {
     const month = now.getMonth() + 1;
     const year = now.getFullYear();
 
-    // Nếu tháng này đã có chỉ số rồi thì trả luôn để client biết (tránh nhập trùng)
-    const existing = await MeterReading.findOne({
-      room: contract.room,
-      type,
-      month,
-      year,
-    });
-
-    const previousReading = await findPreviousReading(
-      contract.room,
-      type,
-      month,
-      year,
-    );
+    const [previousReading, existing] = await Promise.all([
+      findPreviousReading(contract.room, type, month, year),
+      getCurrentMonthReading(contract.room, type, month, year),
+    ]);
 
     return success(
       res,
@@ -83,7 +136,7 @@ const getPreviousReading = async (req, res) => {
         year,
         previousReading,
         alreadySubmitted: !!existing,
-        existing: existing || null,
+        existing: existing || null, // trả về để client hiển thị số + ảnh đã chụp trước đó
       },
       "Lấy chỉ số tháng trước thành công",
     );
@@ -92,45 +145,16 @@ const getPreviousReading = async (req, res) => {
   }
 };
 
-// POST /meter-readings/scan
-// Upload ảnh công tơ -> OCR đọc số -> trả về cho client hiển thị lên ô currentReading để xem/sửa
-// CHƯA lưu vào DB ở bước này.
+// ─── POST /meter-readings/scan ─────────────────────────────────────────────────
+// Upload ảnh → Gemini đọc số → trả về suggestedReading để client hiển thị lên ô nhập.
+// CHƯA lưu DB. Nếu tháng này đã có chỉ số thì trả thêm existing để client hỏi người dùng.
 const scanMeterImage = async (req, res) => {
   try {
-    if (!req.file) return sendError(res, "Vui lòng chọn ảnh công tơ", 400);
+    if (!req.file) return sendError(res, "Vui lòng chụp ảnh công tơ", 400);
 
-    const imageUrl = req.file.path; // Cloudinary URL
-    const { rawText, suggestedReading } = await runOCR(imageUrl);
-
-    return success(
-      res,
-      {
-        imageUrl,
-        ocrRawText: rawText,
-        suggestedReading, // client hiển thị lên ô currentReading, cho sửa lại — có thể null nếu OCR không đọc được
-      },
-      suggestedReading != null
-        ? "Đọc chỉ số từ ảnh thành công"
-        : "Không đọc được số rõ trong ảnh, vui lòng nhập tay",
-    );
-  } catch (err) {
-    return sendError(res, err.message);
-  }
-};
-
-// POST /meter-readings
-// Xác nhận lưu chỉ số. Client gửi: type, currentReading (đã xem/sửa sau OCR),
-// imageUrl + ocrRawText (lấy từ /meter-readings/scan ở bước trước, không bắt buộc).
-// month/year/previousReading do SERVER tự xác định — không nhận từ client.
-const createMeterReading = async (req, res) => {
-  try {
-    const { type, currentReading, unitPrice, imageUrl, ocrRawText } = req.body;
-
-    if (!type || currentReading === undefined || currentReading === null) {
-      return sendError(res, "Thiếu thông tin chỉ số", 400);
-    }
-    if (!["electric", "water"].includes(type)) {
-      return sendError(res, "Loại công tơ không hợp lệ", 400);
+    const { type } = req.body;
+    if (!type || !["electric", "water"].includes(type)) {
+      return sendError(res, "Vui lòng chọn loại công tơ (electric/water)", 400);
     }
 
     const contract = await Contract.findOne({
@@ -139,20 +163,93 @@ const createMeterReading = async (req, res) => {
     });
     if (!contract) return sendError(res, "Bạn chưa có phòng đang thuê", 404);
 
-    // Tháng/năm luôn lấy theo thời gian thực tế lúc gửi — không cho client tự chọn
     const now = new Date();
     const month = now.getMonth() + 1;
     const year = now.getFullYear();
 
-    // Chặn gửi 2 lần trong cùng 1 tháng cho cùng loại công tơ
-    const existing = await MeterReading.findOne({
-      room: contract.room,
+    const imageUrl = req.file.path; // Cloudinary URL
+
+    // Chạy OCR + check existing song song
+    const [ocrResult, existing] = await Promise.all([
+      runGeminiOCR(imageUrl),
+      getCurrentMonthReading(contract.room, type, month, year),
+    ]);
+
+    return success(
+      res,
+      {
+        imageUrl,
+        ocrRawText: ocrResult.rawText,
+        geminiNote: ocrResult.note,
+        suggestedReading: ocrResult.suggestedReading,
+        // Nếu đã có chỉ số tháng này → client cần hỏi người dùng có muốn cập nhật không
+        alreadySubmitted: !!existing,
+        existing: existing
+          ? {
+              id: existing._id,
+              currentReading: existing.currentReading,
+              imageUrl: existing.imageUrl,
+              readingDate: existing.readingDate,
+            }
+          : null,
+      },
+      ocrResult.suggestedReading != null
+        ? "Đọc chỉ số từ ảnh thành công — vui lòng kiểm tra lại trước khi lưu"
+        : "Không đọc được số rõ trong ảnh, vui lòng nhập tay",
+    );
+  } catch (err) {
+    return sendError(res, err.message);
+  }
+};
+
+// ─── POST /meter-readings ──────────────────────────────────────────────────────
+// Lưu mới chỉ số. Nếu tháng này đã có rồi → báo lỗi kèm existing (client dùng PATCH để cập nhật).
+const createMeterReading = async (req, res) => {
+  try {
+    const { type, currentReading, unitPrice, imageUrl, ocrRawText } = req.body;
+
+    if (!type || currentReading == null)
+      return sendError(res, "Thiếu thông tin chỉ số", 400);
+    if (!["electric", "water"].includes(type))
+      return sendError(res, "Loại công tơ không hợp lệ", 400);
+
+    // Ảnh có thể đến từ upload trực tiếp (req.file) hoặc imageUrl từ bước /scan
+    const finalImageUrl = req.file?.path || imageUrl || null;
+    if (!finalImageUrl)
+      return sendError(
+        res,
+        "Vui lòng chụp ảnh công tơ để Admin đối chiếu",
+        400,
+      );
+
+    const contract = await Contract.findOne({
+      tenant: req.user._id,
+      status: "active",
+    });
+    if (!contract) return sendError(res, "Bạn chưa có phòng đang thuê", 404);
+
+    const now = new Date();
+    const month = now.getMonth() + 1;
+    const year = now.getFullYear();
+
+    const existing = await getCurrentMonthReading(
+      contract.room,
       type,
       month,
       year,
-    });
+    );
     if (existing) {
-      return sendError(res, `Bạn đã gửi chỉ số ${type} của tháng này rồi`, 400);
+      return res.status(409).json({
+        success: false,
+        message: `Bạn đã gửi chỉ số ${type === "electric" ? "điện" : "nước"} tháng ${month}/${year} rồi (chỉ số: ${existing.currentReading}). Dùng API cập nhật nếu muốn thay đổi.`,
+        data: {
+          existingId: existing._id,
+          currentReading: existing.currentReading,
+          imageUrl: existing.imageUrl,
+          readingDate: existing.readingDate,
+          isVerified: existing.isVerified,
+        },
+      });
     }
 
     const previousReading = await findPreviousReading(
@@ -161,8 +258,6 @@ const createMeterReading = async (req, res) => {
       month,
       year,
     );
-
-    const defaultUnitPrice = type === "electric" ? 3500 : 8000; // VND
     const finalCurrentReading = parseFloat(currentReading);
 
     if (finalCurrentReading < previousReading) {
@@ -173,15 +268,7 @@ const createMeterReading = async (req, res) => {
       );
     }
 
-    // Cho phép gửi kèm ảnh trực tiếp (nếu client không qua bước /scan riêng)
-    let finalImageUrl = imageUrl || null;
-    let finalOcrRawText = ocrRawText || null;
-    if (req.file) {
-      finalImageUrl = req.file.path;
-      const ocrResult = await runOCR(finalImageUrl);
-      finalOcrRawText = ocrResult.rawText;
-    }
-
+    const defaultUnitPrice = type === "electric" ? 3500 : 8000;
     const reading = await MeterReading.create({
       tenant: req.user._id,
       room: contract.room,
@@ -191,11 +278,11 @@ const createMeterReading = async (req, res) => {
       previousReading,
       unitPrice: unitPrice ? parseFloat(unitPrice) : defaultUnitPrice,
       imageUrl: finalImageUrl,
-      ocrRawText: finalOcrRawText,
+      ocrRawText: ocrRawText || null,
       readingDate: now,
       month,
       year,
-      isVerified: false, // chờ admin xác nhận đối chiếu ảnh
+      isVerified: false,
     });
 
     await generateInvoice(
@@ -204,19 +291,70 @@ const createMeterReading = async (req, res) => {
       reading.month,
       reading.year,
     );
-
     return success(res, reading, "Lưu chỉ số thành công", 201);
   } catch (err) {
     return sendError(res, err.message);
   }
 };
 
-// GET /meter-readings/history
+// ─── PATCH /meter-readings/:id ─────────────────────────────────────────────────
+// Cập nhật chỉ số đã gửi tháng này (người dùng chụp lại / sửa số).
+// Chỉ cho phép cập nhật nếu Admin chưa verify (isVerified = false).
+const updateMeterReading = async (req, res) => {
+  try {
+    const reading = await MeterReading.findOne({
+      _id: req.params.id,
+      tenant: req.user._id,
+    });
+
+    if (!reading) return sendError(res, "Không tìm thấy chỉ số", 404);
+    if (reading.isVerified) {
+      return sendError(
+        res,
+        "Admin đã xác nhận chỉ số này, không thể chỉnh sửa",
+        403,
+      );
+    }
+
+    const { currentReading, unitPrice, imageUrl, ocrRawText } = req.body;
+    const finalImageUrl = req.file?.path || imageUrl || reading.imageUrl;
+    const finalCurrentReading = currentReading
+      ? parseFloat(currentReading)
+      : reading.currentReading;
+
+    if (finalCurrentReading < reading.previousReading) {
+      return sendError(
+        res,
+        `Chỉ số hiện tại (${finalCurrentReading}) không thể nhỏ hơn chỉ số kỳ trước (${reading.previousReading})`,
+        400,
+      );
+    }
+
+    reading.currentReading = finalCurrentReading;
+    reading.imageUrl = finalImageUrl;
+    reading.ocrRawText = ocrRawText || reading.ocrRawText;
+    reading.unitPrice = unitPrice ? parseFloat(unitPrice) : reading.unitPrice;
+    reading.readingDate = new Date();
+    await reading.save(); // pre-save hook tự tính lại usage + totalCost
+
+    // Cập nhật lại invoice tháng này theo số mới
+    await generateInvoice(
+      reading.tenant,
+      reading.room,
+      reading.month,
+      reading.year,
+    );
+    return success(res, reading, "Cập nhật chỉ số thành công");
+  } catch (err) {
+    return sendError(res, err.message);
+  }
+};
+
+// ─── GET /meter-readings/history ───────────────────────────────────────────────
 const getMeterReadingHistory = async (req, res) => {
   try {
     const { type, year } = req.query;
     const filter = { tenant: req.user._id };
-
     if (type) filter.type = type;
     if (year) filter.year = parseInt(year);
 
@@ -234,5 +372,6 @@ module.exports = {
   getPreviousReading,
   scanMeterImage,
   createMeterReading,
+  updateMeterReading,
   getMeterReadingHistory,
 };

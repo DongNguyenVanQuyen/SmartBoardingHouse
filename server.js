@@ -1,5 +1,6 @@
 //server.js
 require("dotenv").config();
+console.log("Vision key loaded:", !!process.env.GOOGLE_VISION_API_KEY);
 
 const express = require("express");
 const cors = require("cors");
@@ -26,6 +27,9 @@ const dashboardRoutes = require("./src/routes/dashboardRoutes.js");
 const statisticsRoutes = require("./src/routes/statisticsRoutes.js");
 const reportRoutes = require("./src/routes/reportRoutes.js");
 
+// Sockets
+const { initChatSocket } = require("./src/sockets/chatSocket");
+
 require("./src/models/Tenant");
 require("./src/models/Floor");
 require("./src/models/Room");
@@ -47,6 +51,8 @@ const io = new Server(server, {
     methods: ["GET", "POST"],
   },
 });
+
+initChatSocket(io);
 
 // Connect DB
 connectDB();

@@ -7,6 +7,7 @@ const {
   getPreviousReading,
   scanMeterImage,
   createMeterReading,
+  updateMeterReading,
   getMeterReadingHistory,
 } = require("../controllers/meterReadingController");
 
@@ -14,14 +15,15 @@ const {
  * @swagger
  * tags:
  *   name: MeterReadings
- *   description: Chỉ số điện / nước (chụp ảnh công tơ hoặc chọn ảnh từ thư viện)
+ *   description: Chỉ số điện / nước — chụp ảnh, Gemini AI đọc số, người dùng xác nhận rồi lưu
  */
 
 /**
  * @swagger
  * /meter-readings/previous:
  *   get:
- *     summary: Lấy chỉ số kỳ trước để hiển thị sẵn khi mở form (không cho sửa)
+ *     summary: Lấy chỉ số kỳ trước + trạng thái tháng này (đã gửi chưa)
+ *     description: Gọi khi mở màn nhập chỉ số — hiển thị sẵn số tháng trước (không cho sửa) và thông báo nếu tháng này đã gửi rồi.
  *     tags: [MeterReadings]
  *     parameters:
  *       - in: query
@@ -30,9 +32,10 @@ const {
  *         schema:
  *           type: string
  *           enum: [electric, water]
+ *         description: Loại công tơ
  *     responses:
  *       200:
- *         description: Chỉ số kỳ trước
+ *         description: Thông tin chỉ số kỳ trước
  *       404:
  *         description: Tenant chưa có phòng đang thuê
  */
@@ -42,11 +45,12 @@ router.get("/previous", protect, getPreviousReading);
  * @swagger
  * /meter-readings/scan:
  *   post:
- *     summary: Upload ảnh công tơ, đọc số bằng OCR (chưa lưu DB)
+ *     summary: Chụp ảnh → Gemini AI đọc số công tơ (chưa lưu DB)
  *     description: >
- *       Bước trung gian — client gọi API này NGAY khi người dùng chụp/chọn ảnh,
- *       nhận về số OCR đọc được để hiển thị lên ô currentReading cho người dùng xem & sửa lại
- *       trước khi gọi POST /meter-readings để lưu thật.
+ *       Bước 1 — client gọi ngay khi người dùng chụp/chọn ảnh.
+ *       Gemini AI đọc số LCD/cơ trên công tơ và trả về suggestedReading để hiển thị lên ô nhập
+ *       cho người dùng xem và sửa lại nếu cần, trước khi bấm "Gửi" gọi POST /meter-readings.
+ *       Nếu tháng này đã có chỉ số thì trả thêm existing để client hỏi người dùng có muốn cập nhật không.
  *     tags: [MeterReadings]
  *     requestBody:
  *       required: true
@@ -54,17 +58,20 @@ router.get("/previous", protect, getPreviousReading);
  *         multipart/form-data:
  *           schema:
  *             type: object
- *             required: [image]
+ *             required: [type, image]
  *             properties:
+ *               type:
+ *                 type: string
+ *                 enum: [electric, water]
  *               image:
  *                 type: string
  *                 format: binary
  *                 description: Ảnh công tơ (chụp camera hoặc chọn từ thư viện)
  *     responses:
  *       200:
- *         description: Trả về imageUrl + số OCR đọc được (suggestedReading)
+ *         description: Trả về imageUrl + suggestedReading (Gemini đọc) + existing nếu tháng này đã gửi rồi
  *       400:
- *         description: Vui lòng chọn ảnh công tơ
+ *         description: Thiếu ảnh hoặc loại công tơ
  */
 router.post(
   "/scan",
@@ -77,11 +84,12 @@ router.post(
  * @swagger
  * /meter-readings:
  *   post:
- *     summary: Xác nhận lưu chỉ số điện/nước
+ *     summary: Lưu chỉ số điện/nước (người dùng đã xác nhận số)
  *     description: >
- *       Tháng/năm KHÔNG do client chọn — server tự lấy theo tháng/năm hiện tại lúc gửi.
- *       Chỉ số kỳ trước cũng do server tự tính, không nhận từ client.
- *       Có thể gửi `imageUrl` (lấy từ /meter-readings/scan ở bước trước) hoặc gửi trực tiếp file `image` ở đây.
+ *       Bước 2 — gọi sau khi người dùng xem/sửa suggestedReading từ /scan và bấm "Gửi".
+ *       Có thể truyền imageUrl (từ bước /scan) hoặc upload thẳng file image ở đây.
+ *       Tháng/năm/previousReading do SERVER tự xác định.
+ *       Nếu tháng này đã có chỉ số → trả 409 kèm dữ liệu existing, client dùng PATCH /:id để cập nhật.
  *     tags: [MeterReadings]
  *     requestBody:
  *       required: true
@@ -96,32 +104,80 @@ router.post(
  *                 enum: [electric, water]
  *               currentReading:
  *                 type: number
- *                 description: Chỉ số hiện tại (đã xem/sửa lại sau khi OCR ở bước /scan)
+ *                 description: Chỉ số hiện tại (đã xem/sửa lại sau Gemini gợi ý)
  *               unitPrice:
  *                 type: number
- *                 description: Giá/đơn vị (bỏ trống sẽ dùng giá mặc định theo loại)
+ *                 description: Giá/đơn vị (bỏ trống dùng mặc định theo loại)
  *               imageUrl:
  *                 type: string
- *                 description: URL ảnh đã upload từ bước /meter-readings/scan (nếu đã gọi bước đó)
+ *                 description: URL ảnh lấy từ bước /scan (nếu đã gọi bước đó)
  *               ocrRawText:
  *                 type: string
+ *                 description: Raw text Gemini đọc được (từ bước /scan)
  *               image:
  *                 type: string
  *                 format: binary
- *                 description: (Tuỳ chọn) Gửi trực tiếp ảnh ở đây nếu KHÔNG gọi /meter-readings/scan trước
+ *                 description: Upload ảnh trực tiếp (nếu không qua bước /scan)
  *     responses:
  *       201:
- *         description: Lưu chỉ số thành công
+ *         description: Lưu thành công
  *       400:
- *         description: Thiếu thông tin / đã gửi chỉ số tháng này rồi / chỉ số không hợp lệ
- *       404:
- *         description: Tenant chưa có phòng đang thuê
+ *         description: Thiếu thông tin / chỉ số không hợp lệ / chưa có ảnh
+ *       409:
+ *         description: Đã gửi chỉ số tháng này rồi — dùng PATCH /:id để cập nhật
  */
 router.post(
   "/",
   protect,
   uploadMeterReading.single("image"),
   createMeterReading,
+);
+
+/**
+ * @swagger
+ * /meter-readings/{id}:
+ *   patch:
+ *     summary: Cập nhật chỉ số đã gửi trong tháng (chụp lại / sửa số)
+ *     description: >
+ *       Chỉ cho phép cập nhật khi Admin chưa xác nhận (isVerified = false).
+ *       Sau khi cập nhật, invoice tháng này sẽ được tính lại tự động.
+ *     tags: [MeterReadings]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: ID của MeterReading cần cập nhật (lấy từ existingId trong response 409)
+ *     requestBody:
+ *       content:
+ *         multipart/form-data:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               currentReading:
+ *                 type: number
+ *               imageUrl:
+ *                 type: string
+ *               ocrRawText:
+ *                 type: string
+ *               image:
+ *                 type: string
+ *                 format: binary
+ *                 description: Ảnh mới nếu chụp lại
+ *     responses:
+ *       200:
+ *         description: Cập nhật thành công, invoice tháng này được tính lại
+ *       403:
+ *         description: Admin đã xác nhận, không thể chỉnh sửa
+ *       404:
+ *         description: Không tìm thấy chỉ số
+ */
+router.patch(
+  "/:id",
+  protect,
+  uploadMeterReading.single("image"),
+  updateMeterReading,
 );
 
 /**
@@ -142,7 +198,7 @@ router.post(
  *           type: integer
  *     responses:
  *       200:
- *         description: Lịch sử chỉ số
+ *         description: Danh sách chỉ số
  */
 router.get("/history", protect, getMeterReadingHistory);
 
