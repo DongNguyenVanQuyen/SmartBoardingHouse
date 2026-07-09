@@ -44,7 +44,7 @@ const markAsRead = async (req, res) => {
         { tenant: req.user._id, isRead: false },
         { isRead: true, readAt: new Date() },
       );
-      return success(res, null, "Đã đọc tất c�?thông báo");
+      return success(res, null, "Đã đọc tất cả thông báo");
     }
 
     if (!notificationIds || !notificationIds.length) {
@@ -76,4 +76,3 @@ const updateFCMToken = async (req, res) => {
 };
 
 module.exports = { getNotifications, markAsRead, updateFCMToken };
-

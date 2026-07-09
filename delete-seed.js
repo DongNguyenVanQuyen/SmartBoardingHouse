@@ -1,29 +1,40 @@
+// clear-data.js
 require("dotenv").config();
 const mongoose = require("mongoose");
 
-const Invoice = require("./src/models/Invoice");
-const Payment = require("./src/models/Payment");
-const MeterReading = require("./src/models/MeterReading");
-const MaintenanceRequest = require("./src/models/MaintenanceRequest");
-const Contract = require("./src/models/Contract");
-const Room = require("./src/models/Room");
+async function clearData() {
+  try {
+    await mongoose.connect(process.env.MONGO_URI, {
+      dbName: "SmartBoardingHouse",
+    });
+    console.log("MongoDB Connected -> DB:", mongoose.connection.name);
 
-const TENANT_ID = "6a26702c2d0a33dd1c7d761a";
+    const collections = [
+      "floors",
+      "rooms",
+      "contracts",
+      "invoices",
+      "payments",
+      "meterreadings",
+      "maintenancerequests",
+      "notifications",
+      "messages",
+      // "tenants", // bỏ comment dòng này nếu muốn xóa luôn tài khoản tenant
+    ];
 
-async function removeSeed() {
-  await mongoose.connect(process.env.MONGO_URI, {
-    dbName: "SmartBoardingHouse",
-  });
+    for (const name of collections) {
+      const result = await mongoose.connection.db
+        .collection(name)
+        .deleteMany({});
+      console.log(`✓ Đã xóa ${result.deletedCount} document trong "${name}"`);
+    }
 
-  await Payment.deleteMany({ tenant: TENANT_ID });
-  await Invoice.deleteMany({ tenant: TENANT_ID });
-  await MeterReading.deleteMany({ tenant: TENANT_ID });
-  await MaintenanceRequest.deleteMany({ tenant: TENANT_ID });
-  await Contract.deleteMany({ tenant: TENANT_ID });
-
-  console.log("Deleted");
-
-  await mongoose.connection.close();
+    console.log("\n✅ Xóa dữ liệu hoàn tất!");
+    await mongoose.connection.close();
+  } catch (error) {
+    console.error("❌ Lỗi khi xóa dữ liệu:", error.message);
+    process.exit(1);
+  }
 }
 
-removeSeed();
+clearData();

@@ -12,7 +12,7 @@ const getDebts = async (req, res) => {
       status: { $in: ["unpaid", "partial", "overdue"] },
     }).populate("room", "roomNumber");
 
-    // Phân loại n�?quá hạn và chưa đến hạn
+    // Phân loại n�?quá hạn và chưa đến hạn
     const overdue = [];
     const pending = [];
 
@@ -58,7 +58,7 @@ const getDebts = async (req, res) => {
         pending,
         recentPaid: paid,
       },
-      "Lấy thông tin công n�?thành công",
+      "Lấy thông tin công nợ thành công",
     );
   } catch (err) {
     return sendError(res, err.message);
@@ -66,4 +66,3 @@ const getDebts = async (req, res) => {
 };
 
 module.exports = { getDebts };
-

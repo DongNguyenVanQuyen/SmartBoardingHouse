@@ -10,6 +10,10 @@ const { Server } = require("socket.io");
 const connectDB = require("./src/configs/db");
 const { specs } = require("./src/configs/swagger");
 const setupSocket = require("./src/configs/socket");
+const firebase = require("./src/configs/firebase");
+
+// Jobs
+const { startDebtReminderJob } = require("./src/jobs/debtReminderJob");
 
 // Routes
 const authRoutes = require("./src/routes/authRoutes.js");
@@ -19,6 +23,7 @@ const contractRoutes = require("./src/routes/contractRoutes.js");
 const invoiceRoutes = require("./src/routes/invoiceRoutes.js");
 const debtRoutes = require("./src/routes/debtRoutes.js");
 const paymentRoutes = require("./src/routes/paymentRoutes.js");
+const publicPaymentRoutes = require("./src/routes/publicPaymentRoutes.js");
 const meterReadingRoutes = require("./src/routes/meterReadingRoutes.js");
 const maintenanceRoutes = require("./src/routes/maintenanceRoutes.js");
 const notificationRoutes = require("./src/routes/notificationRoutes.js");
@@ -56,6 +61,11 @@ initChatSocket(io);
 
 // Connect DB
 connectDB();
+// Firebase Admin
+firebase; // Initialize Firebase Admin SDK
+
+// Start scheduled jobs
+startDebtReminderJob();
 
 // Middlewares
 app.use(cors({ origin: process.env.CLIENT_URL || "*" }));
@@ -86,6 +96,7 @@ app.use("/api/contracts", contractRoutes);
 app.use("/api/invoices", invoiceRoutes);
 app.use("/api/debts", debtRoutes);
 app.use("/api/payments", paymentRoutes);
+app.use("/pay", publicPaymentRoutes);
 app.use("/api/meter-readings", meterReadingRoutes);
 app.use("/api/maintenance-requests", maintenanceRoutes);
 app.use("/api/notifications", notificationRoutes);

@@ -1,5 +1,5 @@
-//src/models/Payment.js
 const mongoose = require("mongoose");
+const crypto = require("crypto");
 
 const paymentSchema = new mongoose.Schema(
   {
@@ -24,8 +24,13 @@ const paymentSchema = new mongoose.Schema(
       enum: ["pending", "success", "failed"],
       default: "pending",
     },
-    transactionId: { type: String }, // Mã giao dịch từ ngân hàng
-    qrData: { type: String }, // Nội dung QR code
+    payToken: {
+      type: String,
+      unique: true,
+      default: () => crypto.randomBytes(16).toString("hex"),
+    },
+    transactionId: { type: String },
+    qrData: { type: String },
     paidAt: { type: Date },
     note: { type: String },
   },

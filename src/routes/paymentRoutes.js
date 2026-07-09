@@ -1,9 +1,10 @@
-//src/routes/paymentRoutes.js
+// src/routes/paymentRoutes.js
 const express = require("express");
 const router = express.Router();
 const { protect } = require("../middlewares/auth");
 const {
-  createPayment,
+  createPaymentSession,
+  getPaymentStatus,
   getPaymentHistory,
 } = require("../controllers/paymentController");
 
@@ -16,9 +17,9 @@ const {
 
 /**
  * @swagger
- * /payments:
+ * /payments/create-session:
  *   post:
- *     summary: Tạo thanh toán
+ *     summary: Tạo phiên thanh toán (trả về QR để quét xác nhận)
  *     tags: [Payments]
  *     requestBody:
  *       content:
@@ -34,9 +35,34 @@ const {
  *                 enum: [qr, cash, transfer]
  *     responses:
  *       201:
- *         description: Thanh toán thành công
+ *         description: Tạo phiên thanh toán thành công, trả về qrUrl để tạo mã QR
+ *       400:
+ *         description: Thiếu thông tin hoặc số tiền vượt quá số còn lại
+ *       404:
+ *         description: Không tìm thấy hóa đơn
  */
-router.post("/", protect, createPayment);
+router.post("/create-session", protect, createPaymentSession);
+
+/**
+ * @swagger
+ * /payments/status/{token}:
+ *   get:
+ *     summary: Kiểm tra trạng thái phiên thanh toán (dùng để app poll)
+ *     tags: [Payments]
+ *     parameters:
+ *       - in: path
+ *         name: token
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: payToken nhận được từ create-session
+ *     responses:
+ *       200:
+ *         description: Trạng thái phiên thanh toán (pending / success / failed)
+ *       404:
+ *         description: Không tìm thấy phiên thanh toán
+ */
+router.get("/status/:token", protect, getPaymentStatus);
 
 /**
  * @swagger

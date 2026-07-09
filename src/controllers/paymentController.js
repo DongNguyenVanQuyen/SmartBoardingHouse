@@ -1,16 +1,17 @@
-//src/controllers/paymentController.js
+// src/controllers/paymentController.js
 const Payment = require("../models/Payment");
 const Invoice = require("../models/Invoice");
 const { success, error: sendError } = require("../utils/response");
 
-// Tạo nội dung QR VietQR
+const BASE_URL = process.env.PUBLIC_URL || "http://localhost:8080";
+
 const generateQRData = (invoice, tenant, amount) => {
-  // Format chuẩn VietQR / Bank transfer
-  return `Phong ${invoice.room?.roomNumber || ""} - Thang ${invoice.month}/${invoice.year} - ${tenant.fullName}`;
+  return `Phong ${invoice.room?.roomNumber || ""} - Thang ${invoice.month}/${invoice.year} - ${tenant.fullName} - ${amount}d`;
 };
 
-// POST /payments
-const createPayment = async (req, res) => {
+// POST /payments/create-session
+// Tạo phiên thanh toán (chưa xử lý ngay) — trả về qrUrl để hiển thị QR
+const createPaymentSession = async (req, res) => {
   try {
     const { invoiceId, amount, method = "qr" } = req.body;
 
@@ -31,7 +32,7 @@ const createPayment = async (req, res) => {
     if (amount > remaining) {
       return sendError(
         res,
-        `S�?tiền thanh toán vượt quá s�?còn lại: ${remaining}`,
+        `Số tiền thanh toán vượt quá số còn lại: ${remaining}`,
         400,
       );
     }
@@ -47,28 +48,151 @@ const createPayment = async (req, res) => {
       status: "pending",
     });
 
-    // Thực t�? webhook t�?ngân hàng s�?confirm payment
-    // Demo: t�?confirm luôn
+    const qrUrl = `${BASE_URL}/pay/${payment.payToken}`;
+
+    return success(
+      res,
+      { paymentId: payment._id, payToken: payment.payToken, qrUrl, qrData },
+      "Tạo phiên thanh toán thành công",
+      201,
+    );
+  } catch (err) {
+    return sendError(res, err.message);
+  }
+};
+
+// GET /pay/:token — trang HTML công khai để xác nhận (không cần đăng nhập)
+const renderPaymentPage = async (req, res) => {
+  try {
+    const payment = await Payment.findOne({ payToken: req.params.token })
+      .populate("tenant", "fullName")
+      .populate({
+        path: "invoice",
+        populate: { path: "room", select: "roomNumber" },
+      });
+
+    if (!payment) {
+      return res
+        .status(404)
+        .send(renderHtml("Không tìm thấy phiên thanh toán", "", false));
+    }
+
+    if (payment.status === "success") {
+      return res.send(
+        renderHtml(
+          "Đã thanh toán thành công",
+          `Hóa đơn tháng ${payment.invoice.month}/${payment.invoice.year} đã được xác nhận.`,
+          false,
+        ),
+      );
+    }
+
+    const room = payment.invoice.room?.roomNumber || "";
+    const amountText = payment.amount.toLocaleString("vi-VN") + "đ";
+
+    const html = `
+      <html>
+      <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <title>Xác nhận thanh toán</title>
+        <style>
+          body { font-family: sans-serif; background: #f5f5f5; margin: 0; padding: 24px; }
+          .card { background: #fff; border-radius: 16px; padding: 24px; max-width: 400px; margin: 40px auto; box-shadow: 0 2px 8px rgba(0,0,0,0.1); text-align: center; }
+          .amount { font-size: 28px; font-weight: bold; color: #2196F3; margin: 16px 0; }
+          .info { color: #666; margin-bottom: 24px; }
+          button { background: #2196F3; color: #fff; border: none; padding: 14px 32px; border-radius: 8px; font-size: 16px; cursor: pointer; width: 100%; }
+          button:disabled { background: #999; }
+        </style>
+      </head>
+      <body>
+        <div class="card">
+          <h2>Xác nhận thanh toán</h2>
+          <div class="info">Phòng ${room} — Hóa đơn tháng ${payment.invoice.month}/${payment.invoice.year}</div>
+          <div class="amount">${amountText}</div>
+          <button id="btnConfirm" onclick="confirmPay()">Xác nhận đã thanh toán</button>
+          <p id="msg" style="margin-top:16px; color: green;"></p>
+        </div>
+        <script>
+          async function confirmPay() {
+            const btn = document.getElementById('btnConfirm');
+            btn.disabled = true;
+            btn.innerText = 'Đang xử lý...';
+            try {
+              const res = await fetch('/pay/${req.params.token}/confirm', { method: 'POST' });
+              const data = await res.json();
+              if (data.success) {
+                document.getElementById('msg').innerText = 'Thanh toán thành công!';
+                btn.style.display = 'none';
+              } else {
+                btn.disabled = false;
+                btn.innerText = 'Xác nhận đã thanh toán';
+                alert(data.message || 'Có lỗi xảy ra');
+              }
+            } catch (e) {
+              btn.disabled = false;
+              btn.innerText = 'Xác nhận đã thanh toán';
+              alert('Lỗi kết nối');
+            }
+          }
+        </script>
+      </body>
+      </html>
+    `;
+
+    return res.send(html);
+  } catch (err) {
+    return res.status(500).send(renderHtml("Lỗi hệ thống", err.message, false));
+  }
+};
+
+const renderHtml = (title, message) => `
+  <html><head><meta charset="utf-8"/></head>
+  <body style="font-family:sans-serif; text-align:center; padding:40px;">
+    <h2>${title}</h2>
+    <p>${message}</p>
+  </body></html>
+`;
+
+// POST /pay/:token/confirm — xử lý thanh toán thật (public, không cần JWT)
+const confirmPaymentByToken = async (req, res) => {
+  try {
+    const payment = await Payment.findOne({ payToken: req.params.token });
+
+    if (!payment) return sendError(res, "Không tìm thấy phiên thanh toán", 404);
+    if (payment.status === "success")
+      return sendError(res, "Phiên thanh toán đã được xác nhận trước đó", 400);
+
+    const invoice = await Invoice.findById(payment.invoice);
+    if (!invoice) return sendError(res, "Không tìm thấy hóa đơn", 404);
+
     payment.status = "success";
     payment.paidAt = new Date();
     payment.transactionId = `TXN_${Date.now()}`;
     await payment.save();
 
-    // Cập nhật hóa đơn
-    invoice.paidAmount += amount;
-    if (invoice.paidAmount >= invoice.totalAmount) {
-      invoice.status = "paid";
-    } else {
-      invoice.status = "partial";
-    }
+    invoice.paidAmount += payment.amount;
+    invoice.status =
+      invoice.paidAmount >= invoice.totalAmount ? "paid" : "partial";
     await invoice.save();
 
-    return success(
-      res,
-      { payment, invoice, qrData },
-      "Thanh toán thành công",
-      201,
-    );
+    return success(res, { payment, invoice }, "Thanh toán thành công");
+  } catch (err) {
+    return sendError(res, err.message);
+  }
+};
+
+// GET /payments/status/:token — app poll để biết đã confirm chưa (cần đăng nhập)
+const getPaymentStatus = async (req, res) => {
+  try {
+    const payment = await Payment.findOne({
+      payToken: req.params.token,
+      tenant: req.user._id,
+    }).populate("invoice", "month year totalAmount paidAmount status");
+
+    if (!payment) return sendError(res, "Không tìm thấy phiên thanh toán", 404);
+
+    return success(res, payment, "Lấy trạng thái thành công");
   } catch (err) {
     return sendError(res, err.message);
   }
@@ -95,12 +219,17 @@ const getPaymentHistory = async (req, res) => {
         payments,
         pagination: { page: parseInt(page), limit: parseInt(limit), total },
       },
-      "Lấy lịch s�?thanh toán thành công",
+      "Lấy lịch sử thanh toán thành công",
     );
   } catch (err) {
     return sendError(res, err.message);
   }
 };
 
-module.exports = { createPayment, getPaymentHistory };
-
+module.exports = {
+  createPaymentSession,
+  renderPaymentPage,
+  confirmPaymentByToken,
+  getPaymentStatus,
+  getPaymentHistory,
+};
