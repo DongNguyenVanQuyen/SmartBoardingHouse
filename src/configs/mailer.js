@@ -1,74 +1,38 @@
 // src/configs/mailer.js
-const nodemailer = require("nodemailer");
+const { Resend } = require("resend");
 
-console.log("MAIL_HOST:", process.env.MAIL_HOST);
-console.log("MAIL_PORT:", process.env.MAIL_PORT);
-console.log("MAIL_USER:", process.env.MAIL_USER);
-
-const transporter = nodemailer.createTransport({
-  host: process.env.MAIL_HOST,
-  port: process.env.MAIL_PORT,
-  secure: false,
-  requireTLS: true,
-  auth: {
-    user: process.env.MAIL_USER,
-    pass: process.env.MAIL_PASS,
-  },
-  family: 4, // ép dùng IPv4
-});
-
-// Kiểm tra kết nối SMTP khi server khởi động
-transporter.verify((err, success) => {
-  if (err) {
-    console.error("===== MAIL VERIFY ERROR =====");
-    console.error(err);
-    console.error("=============================");
-  } else {
-    console.log("✅ Mail server is ready");
-  }
-});
+const resend = new Resend(process.env.RESEND_API_KEY);
 
 const sendOtpEmail = async (toEmail, otp) => {
-  const mailOptions = {
-    from: `"SmartBoardingHouse" <${process.env.MAIL_USER}>`,
+  const { data, error } = await resend.emails.send({
+    from: `"SmartBoardingHouse" <${process.env.MAIL_FROM}>`, // vd: onboarding@resend.dev hoặc noreply@yourdomain.com
     to: toEmail,
     subject: "Mã OTP đặt lại mật khẩu",
     html: `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: auto;">
         <h2 style="color:#2196F3;">Đặt lại mật khẩu</h2>
-
         <p>Xin chào,</p>
-
         <p>Bạn vừa yêu cầu đặt lại mật khẩu cho tài khoản SmartBoardingHouse.</p>
-
         <p>Mã OTP của bạn là:</p>
-
-        <div
-          style="
-            font-size:32px;
-            font-weight:bold;
-            color:#2196F3;
-            letter-spacing:6px;
-            margin:20px 0;
-          "
-        >
+        <div style="font-size:32px; font-weight:bold; color:#2196F3; letter-spacing:6px; margin:20px 0;">
           ${otp}
         </div>
-
         <p>Mã OTP có hiệu lực trong <strong>5 phút</strong>.</p>
-
         <p>Nếu bạn không thực hiện yêu cầu này, vui lòng bỏ qua email.</p>
-
         <hr>
-
         <small>Email được gửi tự động từ hệ thống SmartBoardingHouse.</small>
       </div>
     `,
-  };
+  });
 
-  return await transporter.sendMail(mailOptions);
+  if (error) {
+    console.error("===== RESEND ERROR =====");
+    console.error(error);
+    console.error("=========================");
+    throw error;
+  }
+
+  return data;
 };
 
-module.exports = {
-  sendOtpEmail,
-};
+module.exports = { sendOtpEmail };
