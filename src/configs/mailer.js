@@ -2,11 +2,15 @@
 const nodemailer = require("nodemailer");
 
 const transporter = nodemailer.createTransport({
-  service: "gmail",
+  host: process.env.MAIL_HOST,
+  port: 587,
+  secure: false,
+  requireTLS: true,
   auth: {
     user: process.env.MAIL_USER,
     pass: process.env.MAIL_PASS,
   },
+  family: 4, // ép dùng IPv4
 });
 
 // Kiểm tra kết nối SMTP khi server khởi động
