@@ -1,4 +1,4 @@
-//src/routes/authRoutes.js
+// src/routes/authRoutes.js
 const express = require("express");
 const router = express.Router();
 const {
@@ -6,6 +6,7 @@ const {
   login,
   refreshToken,
   forgotPassword,
+  verifyOtpAndResetPassword,
   changePassword,
   logout,
 } = require("../controllers/authController");
@@ -95,7 +96,7 @@ router.post("/refresh-token", refreshToken);
  * @swagger
  * /auth/forgot-password:
  *   post:
- *     summary: Quên mật khẩu
+ *     summary: Quên mật khẩu - Bước 1 (gửi mã OTP qua email)
  *     tags: [Auth]
  *     security: []
  *     requestBody:
@@ -104,14 +105,46 @@ router.post("/refresh-token", refreshToken);
  *         application/json:
  *           schema:
  *             type: object
+ *             required: [email]
  *             properties:
- *               email: { type: string }
- *               newPassword: { type: string }
+ *               email: { type: string, example: "test@gmail.com" }
+ *     responses:
+ *       200:
+ *         description: Nếu email tồn tại, mã OTP đã được gửi (luôn trả 200 để tránh lộ email tồn tại hay không)
+ *       400:
+ *         description: Thiếu email
+ *       500:
+ *         description: Gửi email thất bại
+ */
+router.post("/forgot-password", forgotPassword);
+
+/**
+ * @swagger
+ * /auth/verify-otp:
+ *   post:
+ *     summary: Quên mật khẩu - Bước 2 (xác thực OTP và đặt mật khẩu mới)
+ *     tags: [Auth]
+ *     security: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [email, otp, newPassword]
+ *             properties:
+ *               email: { type: string, example: "test@gmail.com" }
+ *               otp: { type: string, example: "123456" }
+ *               newPassword: { type: string, example: "newpass123" }
  *     responses:
  *       200:
  *         description: Đặt lại mật khẩu thành công
+ *       400:
+ *         description: OTP không đúng, đã hết hạn, hoặc thiếu thông tin
+ *       404:
+ *         description: Email không tồn tại
  */
-router.post("/forgot-password", forgotPassword);
+router.post("/verify-otp", verifyOtpAndResetPassword);
 
 /**
  * @swagger

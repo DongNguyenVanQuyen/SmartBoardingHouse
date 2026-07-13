@@ -1,7 +1,7 @@
 //src/models/MaintenanceRequest.js
 const mongoose = require("mongoose");
 
-const maintenanceRequestSchema = new mongoose.Schema(
+const MaintenanceRequestSchema = new mongoose.Schema(
   {
     requestNumber: { type: String, required: true, unique: true, trim: true },
     tenant: {
@@ -36,4 +36,4 @@ const maintenanceRequestSchema = new mongoose.Schema(
   { timestamps: true },
 );
 
-module.exports = mongoose.model("MaintenanceRequest", maintenanceRequestSchema);
+module.exports = mongoose.model("MaintenanceRequest", MaintenanceRequestSchema);

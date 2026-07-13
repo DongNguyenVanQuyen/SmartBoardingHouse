@@ -1,7 +1,7 @@
 //src/models/Invoice.js
 const mongoose = require("mongoose");
 
-const invoiceSchema = new mongoose.Schema(
+const InvoiceSchema = new mongoose.Schema(
   {
     invoiceNumber: { type: String, required: true, unique: true, trim: true },
     tenant: {
@@ -49,7 +49,7 @@ const invoiceSchema = new mongoose.Schema(
 );
 
 // Tự tính totalAmount = roomPrice + điện + nước + dịch vụ + tổng items phụ
-invoiceSchema.pre("save", function () {
+InvoiceSchema.pre("save", function () {
   const electricTotal = (this.electricUsage || 0) * (this.electricPrice || 0);
   const waterTotal = (this.waterUsage || 0) * (this.waterPrice || 0);
   const itemsTotal = (this.items || []).reduce((sum, i) => sum + i.total, 0);
@@ -62,4 +62,4 @@ invoiceSchema.pre("save", function () {
     itemsTotal;
 });
 
-module.exports = mongoose.model("Invoice", invoiceSchema);
+module.exports = mongoose.model("Invoice", InvoiceSchema);

@@ -1,7 +1,7 @@
 //src/models/Contract.js
 const mongoose = require("mongoose");
 
-const contractSchema = new mongoose.Schema(
+const ContractSchema = new mongoose.Schema(
   {
     contractNumber: { type: String, required: true, unique: true, trim: true },
     tenant: {
@@ -29,4 +29,4 @@ const contractSchema = new mongoose.Schema(
   { timestamps: true },
 );
 
-module.exports = mongoose.model("Contract", contractSchema);
+module.exports = mongoose.model("Contract", ContractSchema);

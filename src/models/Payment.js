@@ -1,7 +1,7 @@
 const mongoose = require("mongoose");
 const crypto = require("crypto");
 
-const paymentSchema = new mongoose.Schema(
+const PaymentSchema = new mongoose.Schema(
   {
     tenant: {
       type: mongoose.Schema.Types.ObjectId,
@@ -37,4 +37,4 @@ const paymentSchema = new mongoose.Schema(
   { timestamps: true },
 );
 
-module.exports = mongoose.model("Payment", paymentSchema);
+module.exports = mongoose.model("Payment", PaymentSchema);

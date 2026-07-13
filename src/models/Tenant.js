@@ -1,8 +1,7 @@
-//src/models/Tenant.js
 const mongoose = require("mongoose");
 const bcrypt = require("bcryptjs");
 
-const tenantSchema = new mongoose.Schema(
+const TenantSchema = new mongoose.Schema(
   {
     fullName: { type: String, required: true, trim: true },
     email: {
@@ -14,43 +13,42 @@ const tenantSchema = new mongoose.Schema(
     },
     phone: { type: String, trim: true },
     password: { type: String, required: true, minlength: 6 },
-    avatar: { type: String, default: null }, // Cloudinary URL
+    avatar: { type: String, default: null },
     idCard: { type: String, trim: true },
     dateOfBirth: { type: Date },
     address: { type: String, trim: true },
-    // Cache phòng hiện tại để Admin hiển thị nhanh, không cần populate.
-    // Nguồn sự thật vẫn là Room.tenant (ref ngược).
     room: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Room",
       default: null,
     },
-    roomNumber: { type: String, default: null }, // cache, đồng bộ khi gán/đổi phòng
+    roomNumber: { type: String, default: null },
     refreshToken: { type: String, default: null },
     refreshTokenExpiry: { type: Date, default: null },
-    fcmToken: { type: String, default: null }, // Firebase FCM
+    fcmToken: { type: String, default: null },
     isActive: { type: Boolean, default: true },
+    resetOtp: { type: String, default: null, select: false },
+    resetOtpExpiry: { type: Date, default: null, select: false },
   },
   { timestamps: true },
 );
 
-// Hash password trước khi lưu
-tenantSchema.pre("save", async function () {
+TenantSchema.pre("save", async function () {
   if (!this.isModified("password")) return;
   this.password = await bcrypt.hash(this.password, 10);
 });
 
-// So sánh password
-tenantSchema.methods.comparePassword = async function (inputPassword) {
+TenantSchema.methods.comparePassword = async function (inputPassword) {
   return bcrypt.compare(inputPassword, this.password);
 };
 
-// Ẩn password khi trả về JSON
-tenantSchema.methods.toJSON = function () {
+TenantSchema.methods.toJSON = function () {
   const obj = this.toObject();
   delete obj.password;
   delete obj.refreshToken;
+  delete obj.resetOtp;
+  delete obj.resetOtpExpiry;
   return obj;
 };
 
-module.exports = mongoose.model("Tenant", tenantSchema, "Users");
+module.exports = mongoose.model("Tenant", TenantSchema, "Users");

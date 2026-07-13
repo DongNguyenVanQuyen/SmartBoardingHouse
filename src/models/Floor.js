@@ -1,7 +1,7 @@
 //src/models/Floor.js
 const mongoose = require("mongoose");
 
-const floorSchema = new mongoose.Schema(
+const FloorSchema = new mongoose.Schema(
   {
     name: { type: String, required: true, trim: true }, // "Tầng 1", "Tầng 2"
     floorNumber: { type: Number, required: true },
@@ -13,4 +13,4 @@ const floorSchema = new mongoose.Schema(
   { timestamps: true },
 );
 
-module.exports = mongoose.model("Floor", floorSchema);
+module.exports = mongoose.model("Floor", FloorSchema);

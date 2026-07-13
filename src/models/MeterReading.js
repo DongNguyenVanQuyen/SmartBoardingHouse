@@ -1,7 +1,7 @@
 //src/models/MeterReading.js
 const mongoose = require("mongoose");
 
-const meterReadingSchema = new mongoose.Schema(
+const MeterReadingSchema = new mongoose.Schema(
   {
     tenant: {
       type: mongoose.Schema.Types.ObjectId,
@@ -26,9 +26,8 @@ const meterReadingSchema = new mongoose.Schema(
   { timestamps: true },
 );
 
-// Tự tính usage và totalCost (Mongoose 7+ không còn hỗ trợ callback "next",
-// hook đồng bộ chỉ cần không nhận tham số và không gọi next())
-meterReadingSchema.pre("save", function () {
+// Tự tính usage và totalCost
+MeterReadingSchema.pre("save", function () {
   if (this.currentReading != null && this.previousReading != null) {
     this.usage = this.currentReading - this.previousReading;
   }
@@ -37,4 +36,4 @@ meterReadingSchema.pre("save", function () {
   }
 });
 
-module.exports = mongoose.model("MeterReading", meterReadingSchema);
+module.exports = mongoose.model("MeterReading", MeterReadingSchema);

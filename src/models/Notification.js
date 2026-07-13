@@ -1,7 +1,7 @@
 // src/models/Notification.js
 const mongoose = require("mongoose");
 
-const notificationSchema = new mongoose.Schema(
+const NotificationSchema = new mongoose.Schema(
   {
     tenant: {
       type: mongoose.Schema.Types.ObjectId,
@@ -24,8 +24,8 @@ const notificationSchema = new mongoose.Schema(
   { timestamps: true },
 );
 
-notificationSchema.index({ tenant: 1, createdAt: -1 });
-notificationSchema.index({ tenant: 1, isRead: 1 });
-notificationSchema.index({ refId: 1, refModel: 1, type: 1, createdAt: -1 });
+NotificationSchema.index({ tenant: 1, createdAt: -1 });
+NotificationSchema.index({ tenant: 1, isRead: 1 });
+NotificationSchema.index({ refId: 1, refModel: 1, type: 1, createdAt: -1 });
 
-module.exports = mongoose.model("Notification", notificationSchema);
+module.exports = mongoose.model("Notification", NotificationSchema);
