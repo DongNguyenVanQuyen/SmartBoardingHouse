@@ -126,7 +126,13 @@ const forgotPassword = async (req, res) => {
     try {
       await sendOtpEmail(tenant.email, otp);
     } catch (mailErr) {
-      console.error("Gửi email OTP thất bại:", mailErr.message);
+      console.error("===== MAIL ERROR =====");
+      console.error(mailErr);
+      console.error("code:", mailErr.code);
+      console.error("response:", mailErr.response);
+      console.error("responseCode:", mailErr.responseCode);
+      console.error("======================");
+
       return sendError(res, "Không gửi được email, vui lòng thử lại sau", 500);
     }
 
