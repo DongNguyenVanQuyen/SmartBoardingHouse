@@ -5,19 +5,48 @@ const { success, error: sendError } = require("../utils/response");
 
 const BASE_URL = process.env.PUBLIC_URL || "http://localhost:8080";
 
-const generateQRData = (invoice, tenant, amount) => {
-  return `Phong ${invoice.room?.roomNumber || ""} - Thang ${invoice.month}/${invoice.year} - ${tenant.fullName} - ${amount}d`;
+const BANK_CODE = process.env.BANK_CODE;
+const BANK_ACCOUNT = process.env.BANK_ACCOUNT;
+const BANK_ACCOUNT_NAME = process.env.BANK_ACCOUNT_NAME;
+const VIETQR_TEMPLATE = process.env.VIETQR_TEMPLATE || "compact";
+
+// Bỏ dấu tiếng Việt — nội dung chuyển khoản ngân hàng nên dùng chữ không dấu
+const removeVietnameseTones = (str = "") => {
+  return str
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/đ/g, "d")
+    .replace(/Đ/g, "D")
+    .trim();
+};
+
+// Nội dung chuyển khoản: Tên KH + Phòng + Tháng/Năm
+const buildPaymentContent = (invoice, tenant) => {
+  const room = invoice.room?.roomNumber || "";
+  const name = removeVietnameseTones(tenant.fullName || "");
+  return `${name} P${room} T${invoice.month}/${invoice.year}`
+    .replace(/\s+/g, " ")
+    .trim();
+};
+
+// Tạo link ảnh VietQR (img.vietqr.io) — không cần API key
+const generateVietQRUrl = (amount, addInfo) => {
+  const base = `https://img.vietqr.io/image/${BANK_CODE}-${BANK_ACCOUNT}-${VIETQR_TEMPLATE}.png`;
+  const params = new URLSearchParams({
+    amount: String(Math.round(amount)),
+    addInfo,
+    accountName: BANK_ACCOUNT_NAME,
+  });
+  return `${base}?${params.toString()}`;
 };
 
 // POST /payments/create-session
-// Tạo phiên thanh toán (chưa xử lý ngay) — trả về qrUrl để hiển thị QR
 const createPaymentSession = async (req, res) => {
   try {
     console.log("PAYMENT BODY:", req.body); // TODO: xoá log này khi đã fix xong
 
     const { invoiceId, amount, method = "qr" } = req.body;
 
-    // Kiểm tra thiếu field (0 vẫn được coi là có gửi, chỉ chặn khi undefined/null)
     if (
       !invoiceId ||
       amount === undefined ||
@@ -29,7 +58,6 @@ const createPaymentSession = async (req, res) => {
 
     const numericAmount = Number(amount);
 
-    // Kiểm tra giá trị hợp lệ (tách riêng khỏi lỗi "thiếu")
     if (isNaN(numericAmount) || numericAmount <= 0) {
       return sendError(res, "Số tiền thanh toán không hợp lệ", 400);
     }
@@ -52,22 +80,32 @@ const createPaymentSession = async (req, res) => {
       );
     }
 
-    const qrData = generateQRData(invoice, req.user, numericAmount);
+    const addInfo = buildPaymentContent(invoice, req.user);
+    const qrUrl = generateVietQRUrl(numericAmount, addInfo);
 
     const payment = await Payment.create({
       tenant: req.user._id,
       invoice: invoiceId,
       amount: numericAmount,
       method,
-      qrData,
+      qrData: addInfo,
       status: "pending",
     });
 
-    const qrUrl = `${BASE_URL}/pay/${payment.payToken}`;
-
     return success(
       res,
-      { paymentId: payment._id, payToken: payment.payToken, qrUrl, qrData },
+      {
+        paymentId: payment._id,
+        payToken: payment.payToken,
+        qrUrl, // ảnh VietQR để hiển thị / quét bằng app ngân hàng
+        qrContent: addInfo,
+        confirmUrl: `${BASE_URL}/pay/${payment.payToken}`, // trang xác nhận dự phòng qua trình duyệt
+        bankInfo: {
+          bankCode: BANK_CODE,
+          accountNumber: BANK_ACCOUNT,
+          accountName: BANK_ACCOUNT_NAME,
+        },
+      },
       "Tạo phiên thanh toán thành công",
       201,
     );
@@ -170,6 +208,7 @@ const renderHtml = (title, message) => `
 `;
 
 // POST /pay/:token/confirm — xử lý thanh toán thật (public, không cần JWT)
+// Dùng chung cho cả trang HTML lẫn nút xác nhận trong app
 const confirmPaymentByToken = async (req, res) => {
   try {
     const payment = await Payment.findOne({ payToken: req.params.token });
@@ -197,7 +236,7 @@ const confirmPaymentByToken = async (req, res) => {
   }
 };
 
-// GET /payments/status/:token — app poll để biết đã confirm chưa (cần đăng nhập)
+// GET /payments/status/:token
 const getPaymentStatus = async (req, res) => {
   try {
     const payment = await Payment.findOne({

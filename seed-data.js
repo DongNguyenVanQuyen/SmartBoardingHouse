@@ -11,7 +11,7 @@ const Payment = require("./src/models/Payment");
 const MeterReading = require("./src/models/MeterReading");
 const MaintenanceRequest = require("./src/models/MaintenanceRequest");
 
-const TENANT_ID = "6a54b40dcd7183df6bf9bec0";
+const TENANT_ID = "6a56dbd94c302dababe696f2";
 
 async function seedData() {
   try {

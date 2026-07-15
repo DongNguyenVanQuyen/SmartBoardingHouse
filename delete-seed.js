@@ -1,6 +1,7 @@
 require("dotenv").config();
 const mongoose = require("mongoose");
 
+const Tenant = require("./src/models/Tenant");
 const Room = require("./src/models/Room");
 const Contract = require("./src/models/Contract");
 const Invoice = require("./src/models/Invoice");
@@ -8,7 +9,7 @@ const Payment = require("./src/models/Payment");
 const MeterReading = require("./src/models/MeterReading");
 const MaintenanceRequest = require("./src/models/MaintenanceRequest");
 
-const TENANT_ID = "6a52601383c1465fa84bc6f8"; // ID cũ cần xóa
+const TENANT_ID = "6a54f9a73d2533b3cccbaa18"; // ID cũ cần xóa
 
 async function clearSeed() {
   try {
@@ -20,6 +21,7 @@ async function clearSeed() {
       (r) => r._id,
     );
 
+    await Tenant.deleteOne({ _id: TENANT_ID });
     await Payment.deleteMany({ tenant: TENANT_ID });
     await Invoice.deleteMany({ tenant: TENANT_ID });
     await MeterReading.deleteMany({ tenant: TENANT_ID });
