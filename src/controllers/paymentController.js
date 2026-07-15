@@ -10,7 +10,6 @@ const BANK_ACCOUNT = process.env.BANK_ACCOUNT;
 const BANK_ACCOUNT_NAME = process.env.BANK_ACCOUNT_NAME;
 const VIETQR_TEMPLATE = process.env.VIETQR_TEMPLATE || "compact";
 
-// Bỏ dấu tiếng Việt — nội dung chuyển khoản ngân hàng nên dùng chữ không dấu
 const removeVietnameseTones = (str = "") => {
   return str
     .normalize("NFD")
@@ -20,7 +19,6 @@ const removeVietnameseTones = (str = "") => {
     .trim();
 };
 
-// Nội dung chuyển khoản: Tên KH + Phòng + Tháng/Năm
 const buildPaymentContent = (invoice, tenant) => {
   const room = invoice.room?.roomNumber || "";
   const name = removeVietnameseTones(tenant.fullName || "");
@@ -29,7 +27,6 @@ const buildPaymentContent = (invoice, tenant) => {
     .trim();
 };
 
-// Tạo link ảnh VietQR (img.vietqr.io) — không cần API key
 const generateVietQRUrl = (amount, addInfo) => {
   const base = `https://img.vietqr.io/image/${BANK_CODE}-${BANK_ACCOUNT}-${VIETQR_TEMPLATE}.png`;
   const params = new URLSearchParams({
@@ -97,9 +94,9 @@ const createPaymentSession = async (req, res) => {
       {
         paymentId: payment._id,
         payToken: payment.payToken,
-        qrUrl, // ảnh VietQR để hiển thị / quét bằng app ngân hàng
+        qrUrl,
         qrContent: addInfo,
-        confirmUrl: `${BASE_URL}/api/payments/pay/${payment.payToken}`, // trang xác nhận dự phòng qua trình duyệt
+        confirmUrl: `${BASE_URL}/pay/${payment.payToken}`,
         bankInfo: {
           bankCode: BANK_CODE,
           accountNumber: BANK_ACCOUNT,
@@ -208,7 +205,6 @@ const renderHtml = (title, message) => `
 `;
 
 // POST /pay/:token/confirm — xử lý thanh toán thật (public, không cần JWT)
-// Dùng chung cho cả trang HTML lẫn nút xác nhận trong app
 const confirmPaymentByToken = async (req, res) => {
   try {
     const payment = await Payment.findOne({ payToken: req.params.token });
@@ -236,7 +232,7 @@ const confirmPaymentByToken = async (req, res) => {
   }
 };
 
-// GET /payments/status/:token
+// GET /payments/status/:token — app poll để biết đã confirm chưa (cần đăng nhập)
 const getPaymentStatus = async (req, res) => {
   try {
     const payment = await Payment.findOne({
@@ -246,7 +242,13 @@ const getPaymentStatus = async (req, res) => {
 
     if (!payment) return sendError(res, "Không tìm thấy phiên thanh toán", 404);
 
-    return success(res, payment, "Lấy trạng thái thành công");
+    // Bọc theo cùng shape { payment, invoice } như confirmPaymentByToken,
+    // để Android dùng chung 1 model PaymentResult cho cả 2 API (tránh NPE)
+    return success(
+      res,
+      { payment, invoice: payment.invoice },
+      "Lấy trạng thái thành công",
+    );
   } catch (err) {
     return sendError(res, err.message);
   }
