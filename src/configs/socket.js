@@ -1,13 +1,12 @@
-// src/configs/socket.js
 const Message = require("../models/Message");
 const Notification = require("../models/Notification");
 const { verifyAccessToken } = require("../utils/jwt");
 const Tenant = require("../models/Tenant");
+const { getAdminId, buildConversationId } = require("../utils/conversation");
 
 const conversationRoom = (conversationId) => `conversation_${conversationId}`;
 
 const setupSocket = (io) => {
-  // Middleware xác thực socket
   io.use(async (socket, next) => {
     try {
       const token =
@@ -20,131 +19,107 @@ const setupSocket = (io) => {
       if (!tenant) return next(new Error("Tenant không tồn tại"));
       if (!tenant.isActive) return next(new Error("Tài khoản đã bị khóa"));
 
-      // role lấy thẳng từ document DB (tenant.role) — không dùng decoded.role —
-      // để nếu admin đổi quyền user này thì áp dụng ngay lần connect tiếp theo,
-      // không cần đợi access token cũ hết hạn.
-      socket.user = tenant;
+      socket.user = tenant; // role lấy trực tiếp từ DB (tenant.role)
       next();
     } catch (err) {
       next(new Error("Token không hợp lệ"));
     }
   });
 
-  // Map lưu userId -> socketId, chỉ dùng để biết online/offline + gửi notification
-  const onlineUsers = new Map();
-  // Danh sách socketId của các Admin đang online (để broadcast danh sách hội thoại)
-  const onlineAdminSockets = new Set();
+  const onlineUsers = new Map(); // userId -> socketId (Tenant lẫn Admin)
+  let onlineAdminSocketId = null; // vì chỉ có 1 Admin duy nhất
 
-  io.on("connection", (socket) => {
+  io.on("connection", async (socket) => {
     const userId = socket.user._id.toString();
-    const role = socket.user.role; // "Tenant" | "Admin"
+    const role = socket.user.role;
 
     onlineUsers.set(userId, socket.id);
 
-    // Tenant tự động vào phòng hội thoại của chính mình (conversationId = tenantId).
-    // Admin không tự vào phòng nào — client admin phải emit "join_room" với
-    // tenantId của cuộc hội thoại đang mở để nhận tin nhắn realtime của tenant đó.
-    if (role === "Tenant") {
-      socket.join(conversationRoom(userId));
+    if (role === "Admin") {
+      onlineAdminSocketId = socket.id;
     } else {
-      onlineAdminSockets.add(socket.id);
+      // Tenant tự động join phòng hội thoại của chính mình với Admin
+      const adminId = await getAdminId();
+      if (adminId) {
+        socket.join(conversationRoom(buildConversationId(adminId, userId)));
+      }
     }
 
-    console.log(
-      `[Socket] ${socket.user.fullName} (${role}) connected: ${socket.id}`,
-    );
-
+    console.log(`[Socket] ${socket.user.fullName} (${role}) connected: ${socket.id}`);
     io.emit("online_users", Array.from(onlineUsers.keys()));
 
-    // Admin dùng để mở 1 cuộc hội thoại cụ thể (conversationId = tenantId đó)
-    socket.on("join_room", (conversationId) => {
-      if (role !== "Admin") return; // Tenant không cần và không được join phòng khác
-      socket.join(conversationRoom(conversationId));
-      console.log(
-        `[Socket] Admin ${socket.user.fullName} joined room: ${conversationId}`,
-      );
+    // Admin dùng để mở 1 hội thoại cụ thể — client Admin phải emit kèm tenantId
+    socket.on("join_room", async (tenantId) => {
+      if (role !== "Admin" || !tenantId) return;
+      const adminId = await getAdminId();
+      socket.join(conversationRoom(buildConversationId(adminId, tenantId)));
     });
 
-    socket.on("leave_room", (conversationId) => {
-      if (role !== "Admin") return;
-      socket.leave(conversationRoom(conversationId));
+    socket.on("leave_room", async (tenantId) => {
+      if (role !== "Admin" || !tenantId) return;
+      const adminId = await getAdminId();
+      socket.leave(conversationRoom(buildConversationId(adminId, tenantId)));
     });
 
-    // Gửi tin nhắn — payload khớp với Android SocketManager.sendMessageInternal:
-    // { content, type, imageUrl }. Với Admin, cần thêm conversationId (tenantId
-    // đang chat) vì 1 admin chat với nhiều tenant khác nhau.
+    // Gửi tin nhắn — payload khớp Android SocketManager: { content, type, imageUrl }.
+    // Tenant KHÔNG cần truyền receiverId (chỉ có 1 Admin, server tự resolve).
+    // Admin CẦN truyền thêm "tenantId" (đang chat với tenant nào).
     socket.on("send_message", async (data, callback) => {
       const ack = typeof callback === "function" ? callback : () => {};
       try {
         const { content, type = "text", imageUrl } = data || {};
+        if (!content) return ack({ success: false, message: "Thiếu nội dung tin nhắn" });
 
-        const conversationId = role === "Admin" ? data?.conversationId : userId;
+        const adminId = await getAdminId();
+        if (!adminId) return ack({ success: false, message: "Hệ thống chưa có Admin" });
 
-        if (!conversationId) {
-          return ack({ success: false, message: "Thiếu conversationId" });
+        let senderId, receiverId, tenantId;
+        if (role === "Tenant") {
+          senderId = userId;
+          receiverId = adminId;
+          tenantId = userId;
+        } else {
+          tenantId = data?.tenantId;
+          if (!tenantId) return ack({ success: false, message: "Thiếu tenantId" });
+          senderId = adminId;
+          receiverId = tenantId;
         }
-        if (!content) {
-          return ack({ success: false, message: "Thiếu nội dung tin nhắn" });
-        }
+
+        const conversationId = buildConversationId(adminId, tenantId);
 
         const message = await Message.create({
           conversationId,
-          senderRole: role,
+          sender: senderId,
+          receiver: receiverId,
           content,
           type,
           imageUrl: imageUrl || null,
         });
 
         const room = conversationRoom(conversationId);
-
-        // Gửi cho mọi client đang trong phòng hội thoại này (tenant chủ phòng
-        // + admin đang mở đúng hội thoại đó, kể cả chính người gửi).
         io.to(room).emit("new_message", message);
-
-        // Báo cho toàn bộ admin online (kể cả admin chưa mở đúng hội thoại này)
-        // để cập nhật badge/danh sách hội thoại ở màn hình getConversations.
-        if (role === "Tenant") {
-          onlineAdminSockets.forEach((adminSocketId) => {
-            io.to(adminSocketId).emit("conversation_updated", {
-              conversationId,
-              lastMessage: message,
-            });
-          });
-        }
-
         ack({ success: true, data: message });
 
-        // Tạo notification nếu phía nhận không online trong đúng phòng đó
-        const roomSockets = await io.in(room).fetchSockets();
-        const receiverIsPresent =
-          role === "Tenant"
-            ? roomSockets.some((s) => s.user.role === "Admin")
-            : roomSockets.some((s) => s.user._id.toString() === conversationId);
+        // Notification nếu phía nhận offline
+        const receiverSocketId =
+          receiverId === adminId ? onlineAdminSocketId : onlineUsers.get(receiverId);
 
-        if (!receiverIsPresent) {
-          if (role === "Tenant") {
-            // Thông báo cho tất cả Admin (không biết admin cụ thể nào sẽ xử lý)
-            const admins = await Tenant.find({ role: "Admin" }).select("_id");
-            await Notification.insertMany(
-              admins.map((admin) => ({
-                tenant: admin._id,
-                title: "Tin nhắn mới",
-                body: `${socket.user.fullName}: ${content.substring(0, 50)}`,
-                type: "message",
-                refId: message._id,
-                refModel: "Message",
-              })),
-            );
-          } else {
-            await Notification.create({
-              tenant: conversationId,
-              title: "Tin nhắn mới từ quản lý",
-              body: content.substring(0, 50),
-              type: "message",
-              refId: message._id,
-              refModel: "Message",
-            });
-          }
+        if (!receiverSocketId) {
+          await Notification.create({
+            tenant: role === "Tenant" ? adminId : tenantId,
+            // Lưu ý: model Notification hiện tại chỉ có field "tenant" (1 người nhận cụ thể).
+            // Nếu Admin cần nhận notification giống Tenant, Notification model cần thêm
+            // trường phân biệt đối tượng nhận (vd: recipientRole) — hiện đang gán tạm
+            // "tenant: adminId" khi Tenant gửi, cần đối chiếu lại nếu Notification chỉ nên
+            // dành cho Tenant.
+            title: role === "Tenant" ? "Tin nhắn mới" : "Tin nhắn mới từ quản lý",
+            body:
+              (role === "Tenant" ? `${socket.user.fullName}: ` : "") +
+              content.substring(0, 50),
+            type: "message",
+            refId: message._id,
+            refModel: "Message",
+          });
         }
       } catch (err) {
         console.error("[Socket] send_message error:", err);
@@ -152,37 +127,38 @@ const setupSocket = (io) => {
       }
     });
 
-    // Đang nhập — payload khớp Android: { isTyping }. Không có receiverId vì
-    // Tenant chỉ có 1 phòng (của chính mình); Admin cần conversationId.
-    socket.on("typing", (data) => {
-      const conversationId =
-        role === "Admin" ? data?.conversationId : userId;
-      if (!conversationId) return;
+    socket.on("typing", async (data) => {
+      const adminId = await getAdminId();
+      if (!adminId) return;
+      const tenantId = role === "Admin" ? data?.tenantId : userId;
+      if (!tenantId) return;
 
+      const conversationId = buildConversationId(adminId, tenantId);
       socket
         .to(conversationRoom(conversationId))
         .emit("typing", { isTyping: !!data?.isTyping, senderRole: role });
     });
 
-    // Đánh dấu đã đọc — Android emit "mark_read" không kèm tham số.
-    // Tenant: đánh dấu đã đọc các tin Admin gửi trong phòng của chính mình.
-    // Admin: cần truyền conversationId (tenantId) của hội thoại đang xem.
+    // Android emit "mark_read" không kèm tham số (Tenant tự biết phòng của mình).
+    // Admin cần truyền { tenantId } để biết đang đọc hội thoại nào.
     socket.on("mark_read", async (data) => {
       try {
-        const conversationId = role === "Admin" ? data?.conversationId : userId;
-        if (!conversationId) return;
+        const adminId = await getAdminId();
+        if (!adminId) return;
+        const tenantId = role === "Admin" ? data?.tenantId : userId;
+        if (!tenantId) return;
 
+        const conversationId = buildConversationId(adminId, tenantId);
         const readerIsTenant = role === "Tenant";
-        const filter = {
-          conversationId,
-          senderRole: readerIsTenant ? "Admin" : "Tenant",
-          isRead: false,
-        };
 
-        await Message.updateMany(filter, {
-          isRead: true,
-          readAt: new Date(),
-        });
+        await Message.updateMany(
+          {
+            conversationId,
+            sender: readerIsTenant ? adminId : tenantId,
+            isRead: false,
+          },
+          { isRead: true, readAt: new Date() },
+        );
 
         io.to(conversationRoom(conversationId)).emit("messages_read", {
           conversationId,
@@ -195,7 +171,9 @@ const setupSocket = (io) => {
 
     socket.on("disconnect", () => {
       onlineUsers.delete(userId);
-      onlineAdminSockets.delete(socket.id);
+      if (role === "Admin" && onlineAdminSocketId === socket.id) {
+        onlineAdminSocketId = null;
+      }
       io.emit("online_users", Array.from(onlineUsers.keys()));
       console.log(`[Socket] ${socket.user.fullName} disconnected`);
     });

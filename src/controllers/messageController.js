@@ -1,14 +1,15 @@
-// src/controllers/messageController.js
 const Message = require("../models/Message");
 const { success, error: sendError } = require("../utils/response");
+const { getAdminId, buildConversationId } = require("../utils/conversation");
 
-// GET /messages
-// Dùng cho ADMIN: lấy danh sách tất cả cuộc trò chuyện (mỗi tenant 1 conversation)
+// GET /messages — ADMIN: danh sách tất cả cuộc trò chuyện
 const getConversations = async (req, res) => {
   try {
     if (req.user.role !== "Admin") {
       return sendError(res, "Chỉ admin mới được xem danh sách hội thoại", 403);
     }
+
+    const adminId = req.user._id.toString();
 
     const conversations = await Message.aggregate([
       { $sort: { createdAt: -1 } },
@@ -22,7 +23,8 @@ const getConversations = async (req, res) => {
                 {
                   $and: [
                     { $eq: ["$isRead", false] },
-                    { $eq: ["$senderRole", "Tenant"] },
+                    // chưa đọc tính cho Admin = tin do Tenant gửi (sender != adminId)
+                    { $ne: [{ $toString: "$sender" }, adminId] },
                   ],
                 },
                 1,
@@ -34,9 +36,18 @@ const getConversations = async (req, res) => {
       },
       { $sort: { "lastMessage.createdAt": -1 } },
       {
+        // conversationId có dạng "${adminId}_${tenantId}" -> tách lấy tenantId
+        // (phần tử thứ 2 sau khi split theo "_") để $lookup sang collection tenants
+        $addFields: {
+          tenantId: {
+            $toObjectId: { $arrayElemAt: [{ $split: ["$_id", "_"] }, 1] },
+          },
+        },
+      },
+      {
         $lookup: {
           from: "tenants",
-          localField: "_id",
+          localField: "tenantId",
           foreignField: "_id",
           as: "tenant",
         },
@@ -58,26 +69,28 @@ const getConversations = async (req, res) => {
   }
 };
 
-// GET /messages/me
-// Dùng cho TENANT: lấy lịch sử chat của chính mình với admin
+// GET /messages/me — TENANT: lịch sử chat của chính mình với Admin
 const getMyMessages = async (req, res) => {
   try {
     if (req.user.role !== "Tenant") {
       return sendError(res, "Chỉ tenant mới dùng được API này", 403);
     }
 
+    const adminId = await getAdminId();
+    if (!adminId) return sendError(res, "Hệ thống chưa có tài khoản Admin", 500);
+
+    const conversationId = buildConversationId(adminId, req.user._id);
     const { page = 1, limit = 30 } = req.query;
     const skip = (page - 1) * parseInt(limit);
-    const conversationId = req.user._id;
 
     const messages = await Message.find({ conversationId })
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(parseInt(limit));
 
-    // Đánh dấu đã đọc các tin nhắn từ admin gửi tới
+    // Đánh dấu đã đọc các tin do Admin gửi tới (sender = adminId)
     await Message.updateMany(
-      { conversationId, senderRole: "Admin", isRead: false },
+      { conversationId, sender: adminId, isRead: false },
       { isRead: true, readAt: new Date() },
     );
 
@@ -87,8 +100,7 @@ const getMyMessages = async (req, res) => {
   }
 };
 
-// GET /messages/:tenantId
-// Dùng cho ADMIN: lấy lịch sử chat với 1 tenant cụ thể
+// GET /messages/:tenantId — ADMIN: lịch sử chat với 1 tenant cụ thể
 const getMessagesWithTenant = async (req, res) => {
   try {
     if (req.user.role !== "Admin") {
@@ -96,17 +108,20 @@ const getMessagesWithTenant = async (req, res) => {
     }
 
     const { tenantId } = req.params;
+    const adminId = req.user._id.toString();
+    const conversationId = buildConversationId(adminId, tenantId);
+
     const { page = 1, limit = 30 } = req.query;
     const skip = (page - 1) * parseInt(limit);
 
-    const messages = await Message.find({ conversationId: tenantId })
+    const messages = await Message.find({ conversationId })
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(parseInt(limit));
 
-    // Đánh dấu đã đọc các tin nhắn từ tenant gửi tới
+    // Đánh dấu đã đọc các tin do Tenant gửi tới (sender = tenantId)
     await Message.updateMany(
-      { conversationId: tenantId, senderRole: "Tenant", isRead: false },
+      { conversationId, sender: tenantId, isRead: false },
       { isRead: true, readAt: new Date() },
     );
 
@@ -116,18 +131,12 @@ const getMessagesWithTenant = async (req, res) => {
   }
 };
 
-// POST /messages/upload-image
-// Dùng chung cho cả Tenant lẫn Admin: upload ảnh chat lên Cloudinary,
-// trả về URL để client gửi tiếp qua socket ("send_message" với type="image").
-// Route này KHÔNG tạo Message trong DB — việc lưu Message vẫn do socket
-// "send_message" đảm nhiệm, tránh bị lưu 2 lần.
+// POST /messages/upload-image — không đổi
 const uploadChatImage = async (req, res) => {
   try {
     if (!req.file) {
       return sendError(res, "Không có file ảnh nào được gửi lên", 400);
     }
-
-    // multer-storage-cloudinary gắn URL đã upload vào req.file.path
     return success(
       res,
       { imageUrl: req.file.path, publicId: req.file.filename },

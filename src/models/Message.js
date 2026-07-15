@@ -2,15 +2,22 @@ const mongoose = require("mongoose");
 
 const MessageSchema = new mongoose.Schema(
   {
+    // Luôn có dạng `${adminId}_${tenantId}` — cố định vị trí adminId trước,
+    // bất kể ai là người gửi, để 1 cuộc hội thoại (Admin <-> 1 Tenant) luôn
+    // ứng với đúng 1 conversationId duy nhất.
     conversationId: {
+      type: String,
+      required: true,
+    },
+    sender: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Tenant",
-      required: true, // luôn là tenantId, vì chỉ có 1 admin
+      required: true,
     },
-    senderRole: {
-      type: String,
-      enum: ["Tenant", "Admin"],
-      required: true, // ai là người gửi
+    receiver: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Tenant",
+      required: true,
     },
     content: { type: String, required: true },
     type: { type: String, enum: ["text", "image"], default: "text" },
