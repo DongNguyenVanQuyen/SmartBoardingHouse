@@ -2,6 +2,7 @@
 const Invoice = require("../models/Invoice");
 const MeterReading = require("../models/MeterReading");
 const Room = require("../models/Room");
+const Contract = require("../models/Contract");
 
 const generateInvoice = async (tenantId, roomId, month, year) => {
   const room = await Room.findById(roomId);
@@ -103,5 +104,29 @@ const generateInvoice = async (tenantId, roomId, month, year) => {
     });
   }
 };
+// Chạy cho TẤT CẢ hợp đồng đang active, dùng cho cron ngày 15 hàng tháng
+const generateMonthlyInvoicesForAllRooms = async (month, year) => {
+  // TODO: đổi field trạng thái cho khớp Contract thật (vd: status: "active", isActive: true...)
+  const activeContracts = await Contract.find({ status: "active" });
 
-module.exports = { generateInvoice };
+  const results = { success: 0, failed: [] };
+
+  for (const contract of activeContracts) {
+    try {
+      // TODO: đổi tên field nếu Contract lưu tenant/room khác tên (vd: contract.tenantId, contract.roomId)
+      await generateInvoice(contract.tenant, contract.room, month, year);
+      results.success++;
+    } catch (err) {
+      results.failed.push({ contractId: contract._id, error: err.message });
+    }
+  }
+
+  console.log(
+    `[InvoiceGeneration] Tháng ${month}/${year}: thành công ${results.success}, lỗi ${results.failed.length}`,
+  );
+  if (results.failed.length) console.error(results.failed);
+
+  return results;
+};
+
+module.exports = { generateInvoice, generateMonthlyInvoicesForAllRooms };
