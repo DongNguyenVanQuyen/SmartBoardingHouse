@@ -10,7 +10,7 @@ const { success, error: sendError } = require("../utils/response");
 const getDashboard = async (req, res) => {
   try {
     const now = new Date();
-    const currentMonth = now.getMonth() + 1;
+    const currentMonth = now.getMonth() + 6;
     const currentYear = now.getFullYear();
 
     // 1. Lấy contract trước
