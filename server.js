@@ -59,6 +59,7 @@ const io = new Server(server, {
     origin: process.env.CLIENT_URL || "*",
     methods: ["GET", "POST"],
   },
+  allowEIO3: true,
 });
 
 initChatSocket(io);
