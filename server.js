@@ -9,7 +9,6 @@ const { Server } = require("socket.io");
 
 const connectDB = require("./src/configs/db");
 const { specs } = require("./src/configs/swagger");
-const setupSocket = require("./src/configs/socket");
 const firebase = require("./src/configs/firebase");
 
 // Jobs
@@ -128,8 +127,7 @@ app.use((err, req, res, next) => {
     .json({ success: false, message: "Lỗi server", error: err.message });
 });
 
-// Setup Socket.IO chat
-setupSocket(io);
+
 
 const PORT = process.env.PORT || 5000;
 server.listen(PORT, () => {
