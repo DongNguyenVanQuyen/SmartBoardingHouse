@@ -11,7 +11,7 @@ const getDashboard = async (req, res) => {
   try {
     const now = new Date();
     const currentMonth = now.getMonth() + 6;
-    const currentYear = now.getFullYear();
+    const currentYear = now.getFullYear() + 1;
 
     // 1. Lấy contract trước
     const contract = await Contract.findOne({
