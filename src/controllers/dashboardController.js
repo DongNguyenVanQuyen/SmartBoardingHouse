@@ -86,14 +86,32 @@ const getDashboard = async (req, res) => {
     let electricAmount = 0;
     let waterAmount = 0;
 
-    if (currentInvoice?.items?.length) {
-      currentInvoice.items.forEach((item) => {
-        const name = item.name.toLowerCase();
-        if (name.includes("điện") || name.includes("dien"))
-          electricAmount += item.total;
-        if (name.includes("nước") || name.includes("nuoc"))
-          waterAmount += item.total;
-      });
+    if (currentInvoice) {
+      // ⭐ FIX: Ưu tiên tính trực tiếp từ các field riêng của invoice
+      // (roomPrice/electricUsage/electricPrice/waterUsage/waterPrice),
+      // vì hóa đơn tự sinh hàng tháng (generateInvoice) thường KHÔNG điền
+      // vào items[] — items[] chỉ dùng cho hóa đơn nhập tay/khác.
+      // Trước đây code chỉ đọc items[] nên với hóa đơn tự sinh, electricAmount/
+      // waterAmount luôn = 0 dù invoice đã có dữ liệu, khiến app hiển thị nhầm
+      // "Chưa chụp" trong khi hóa đơn đã có số liệu điện/nước.
+      if (currentInvoice.electricUsage > 0 || currentInvoice.electricPrice > 0) {
+        electricAmount = currentInvoice.electricUsage * currentInvoice.electricPrice;
+      }
+      if (currentInvoice.waterUsage > 0 || currentInvoice.waterPrice > 0) {
+        waterAmount = currentInvoice.waterUsage * currentInvoice.waterPrice;
+      }
+
+      // Fallback: nếu invoice không có các field riêng (electricAmount/waterAmount
+      // vẫn = 0) nhưng có items[], thử tính từ items[] như cũ.
+      if (electricAmount === 0 && waterAmount === 0 && currentInvoice.items?.length) {
+        currentInvoice.items.forEach((item) => {
+          const name = item.name.toLowerCase();
+          if (name.includes("điện") || name.includes("dien"))
+            electricAmount += item.total;
+          if (name.includes("nước") || name.includes("nuoc"))
+            waterAmount += item.total;
+        });
+      }
     }
 
     return success(
