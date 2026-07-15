@@ -23,10 +23,12 @@ const register = async (req, res) => {
     const existing = await Tenant.findOne({ email });
     if (existing) return sendError(res, "Email đã được sử dụng", 400);
 
+    // Không nhận role từ req.body để tránh client tự phong Admin cho mình —
+    // đăng ký công khai luôn tạo role mặc định "Tenant" (schema đã default sẵn).
     const tenant = await Tenant.create({ fullName, email, phone, password });
 
-    const accessToken = generateAccessToken(tenant._id);
-    const refreshToken = generateRefreshToken(tenant._id);
+    const accessToken = generateAccessToken(tenant._id, tenant.role);
+    const refreshToken = generateRefreshToken(tenant._id, tenant.role);
 
     tenant.refreshToken = refreshToken;
     await tenant.save();
@@ -59,8 +61,9 @@ const login = async (req, res) => {
 
     if (!tenant.isActive) return sendError(res, "Tài khoản đã bị khóa", 403);
 
-    const accessToken = generateAccessToken(tenant._id);
-    const refreshToken = generateRefreshToken(tenant._id);
+    // Ký role thật lấy từ DB, không mặc định "Tenant" nữa
+    const accessToken = generateAccessToken(tenant._id, tenant.role);
+    const refreshToken = generateRefreshToken(tenant._id, tenant.role);
 
     tenant.refreshToken = refreshToken;
     await tenant.save();
@@ -88,8 +91,10 @@ const refreshToken = async (req, res) => {
       return sendError(res, "Refresh token không hợp lệ", 401);
     }
 
-    const accessToken = generateAccessToken(tenant._id);
-    const newRefreshToken = generateRefreshToken(tenant._id);
+    // Lấy role hiện tại từ DB (không dùng decoded.role) — phòng trường hợp
+    // admin đổi quyền tenant này sau khi refresh token cũ đã được cấp.
+    const accessToken = generateAccessToken(tenant._id, tenant.role);
+    const newRefreshToken = generateRefreshToken(tenant._id, tenant.role);
 
     tenant.refreshToken = newRefreshToken;
     await tenant.save();

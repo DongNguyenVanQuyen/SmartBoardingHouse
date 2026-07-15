@@ -11,6 +11,11 @@ const TenantSchema = new mongoose.Schema(
       lowercase: true,
       trim: true,
     },
+    role: {
+    type: String,
+    enum: ["Tenant", "Admin"],
+    default: "Tenant",
+    },
     phone: { type: String, trim: true },
     password: { type: String, required: true, minlength: 6 },
     avatar: { type: String, default: null },
