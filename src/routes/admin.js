@@ -3,8 +3,9 @@ const express = require("express");
 const router = express.Router();
 const Contract = require("../models/Contract");
 const { generateInvoice } = require("../services/invoiceService");
+const { protect } = require("../middlewares/auth");
 
-router.post("/admin/test/advance-month", async (req, res) => {
+router.post("/admin/test/advance-month", protect, async (req, res) => {
   try {
     const contract = await Contract.findOne({
       tenant: req.user._id,
