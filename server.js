@@ -37,7 +37,7 @@ const reportRoutes = require("./src/routes/reportRoutes.js");
 const adminRoutes = require("./src/routes/admin.js");
 
 // Sockets
-const { initChatSocket } = require("./src/sockets/chatSocket");
+const setupSocket = require("./src/configs/socket");
 
 require("./src/models/Tenant");
 require("./src/models/Floor");
@@ -62,7 +62,7 @@ const io = new Server(server, {
   allowEIO3: true,
 });
 
-initChatSocket(io);
+setupSocket(io);
 
 // Connect DB
 connectDB();
