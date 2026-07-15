@@ -99,7 +99,7 @@ const createPaymentSession = async (req, res) => {
         payToken: payment.payToken,
         qrUrl, // ảnh VietQR để hiển thị / quét bằng app ngân hàng
         qrContent: addInfo,
-        confirmUrl: `${BASE_URL}/pay/${payment.payToken}`, // trang xác nhận dự phòng qua trình duyệt
+        confirmUrl: `${BASE_URL}/api/payments/pay/${payment.payToken}`, // trang xác nhận dự phòng qua trình duyệt
         bankInfo: {
           bankCode: BANK_CODE,
           accountNumber: BANK_ACCOUNT,
