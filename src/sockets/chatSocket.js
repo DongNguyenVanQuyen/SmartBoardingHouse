@@ -41,6 +41,7 @@ const initChatSocket = (io) => {
       const conversationId = _id.toString();
       onlineUsers.set(conversationId, socket.id);
       socket.join(conversationId); // tenant join room riêng của mình
+      io.to(ADMIN_ROOM).emit("tenant_online", { conversationId });
 
       console.log(`Tenant ${conversationId} đã kết nối`);
     } else if (role === "Admin") {
@@ -60,7 +61,16 @@ const initChatSocket = (io) => {
           conversationId: targetConversationId,
         } = data;
 
-        if (!content) {
+        // Tin nhắn dạng "image" bắt buộc phải có imageUrl (đã upload lên Cloudinary trước đó
+        // qua REST endpoint POST /messages/upload-image). Tin nhắn "text" bắt buộc có content.
+        if (type === "image") {
+          if (!imageUrl) {
+            return callback?.({
+              success: false,
+              message: "Thiếu imageUrl cho tin nhắn ảnh",
+            });
+          }
+        } else if (!content) {
           return callback?.({
             success: false,
             message: "Nội dung tin nhắn không được để trống",
@@ -86,7 +96,7 @@ const initChatSocket = (io) => {
         const message = await Message.create({
           conversationId,
           senderRole: role,
-          content,
+          content: content || (type === "image" ? "[Hình ảnh]" : ""),
           type,
           imageUrl,
         });
@@ -96,6 +106,13 @@ const initChatSocket = (io) => {
 
         // Gửi tin nhắn tới admin (room chung), kèm conversationId để admin biết của tenant nào
         io.to(ADMIN_ROOM).emit("new_message", message);
+
+        // Cho phép admin refresh danh sách hội thoại (last message / unread count)
+        // mà không cần gọi lại toàn bộ getConversations sau mỗi tin nhắn.
+        io.to(ADMIN_ROOM).emit("conversation_updated", {
+          conversationId,
+          lastMessage: message,
+        });
 
         callback?.({ success: true, data: message });
       } catch (err) {
@@ -107,7 +124,7 @@ const initChatSocket = (io) => {
     // Đánh dấu đã đọc
     socket.on("mark_read", async (data) => {
       try {
-        const { conversationId: targetConversationId } = data;
+        const { conversationId: targetConversationId } = data || {};
         const conversationId =
           role === "Tenant" ? _id.toString() : targetConversationId;
 
@@ -145,6 +162,9 @@ const initChatSocket = (io) => {
     socket.on("disconnect", () => {
       if (role === "Tenant") {
         onlineUsers.delete(_id.toString());
+        io.to(ADMIN_ROOM).emit("tenant_offline", {
+          conversationId: _id.toString(),
+        });
         console.log(`Tenant ${_id} đã ngắt kết nối`);
       } else if (role === "Admin") {
         onlineUsers.delete("admin");

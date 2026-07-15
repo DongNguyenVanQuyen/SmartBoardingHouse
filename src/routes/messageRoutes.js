@@ -1,82 +1,37 @@
-//src/routes/messageRoutes.js
+// src/routes/messageRoutes.js
 const express = require("express");
 const router = express.Router();
-const { protect } = require("../middlewares/auth");
-const { uploadMaintenance } = require("../configs/cloudinary");
+
 const {
-  createRequest,
-  getRequests,
-  getRequestById,
-} = require("../controllers/maintenanceController");
+  getConversations,
+  getMyMessages,
+  getMessagesWithTenant,
+  uploadChatImage,
+} = require("../controllers/messageController");
 
-/**
- * @swagger
- * tags:
- *   name: Maintenance
- *   description: Yêu cầu sửa chữa
- */
+// NOTE: đổi đường dẫn import này cho đúng với middleware xác thực JWT hiện có
+// trong project của bạn (middleware phải gán req.user = { role, _id }).
+const { protect } = require("../middlewares/auth");
+const {
+  uploadChatImage: uploadChatImageMiddleware,
+} = require("../configs/cloudinary");
 
-/**
- * @swagger
- * /maintenance-requests:
- *   post:
- *     summary: Tạo yêu cầu sửa chữa
- *     tags: [Maintenance]
- *     requestBody:
- *       content:
- *         multipart/form-data:
- *           schema:
- *             type: object
- *             required: [title, description]
- *             properties:
- *               title: { type: string }
- *               description: { type: string }
- *               priority:
- *                 type: string
- *                 enum: [low, medium, high]
- *               category:
- *                 type: string
- *                 enum: [electrical, plumbing, furniture, other]
- *               images:
- *                 type: array
- *                 items:
- *                   type: string
- *                   format: binary
- *     responses:
- *       201:
- *         description: Gửi yêu cầu thành công
- *   get:
- *     summary: Danh sách yêu cầu
- *     tags: [Maintenance]
- *     parameters:
- *       - in: query
- *         name: status
- *         schema:
- *           type: string
- *           enum: [pending, processing, completed, cancelled]
- *     responses:
- *       200:
- *         description: Danh sách yêu cầu
- */
-router.post("/", protect, uploadMaintenance.array("images", 5), createRequest);
-router.get("/", protect, getRequests);
+// ADMIN: danh sách hội thoại (mỗi tenant 1 hội thoại)
+router.get("/", protect, getConversations);
 
-/**
- * @swagger
- * /maintenance-requests/{id}:
- *   get:
- *     summary: Chi tiết yêu cầu sửa chữa
- *     tags: [Maintenance]
- *     parameters:
- *       - in: path
- *         name: id
- *         required: true
- *         schema:
- *           type: string
- *     responses:
- *       200:
- *         description: Thông tin yêu cầu
- */
-router.get("/:id", protect, getRequestById);
+// TENANT: lịch sử chat của chính mình
+router.get("/me", protect, getMyMessages);
+
+// ADMIN: lịch sử chat với 1 tenant cụ thể
+router.get("/:tenantId", protect, getMessagesWithTenant);
+
+// TENANT hoặc ADMIN: upload ảnh chat lên Cloudinary, trả về imageUrl
+// Client sau đó gửi imageUrl này qua socket "send_message" (type: "image")
+router.post(
+  "/upload-image",
+  protect,
+  uploadChatImageMiddleware.single("image"),
+  uploadChatImage,
+);
 
 module.exports = router;

@@ -116,4 +116,31 @@ const getMessagesWithTenant = async (req, res) => {
   }
 };
 
-module.exports = { getConversations, getMyMessages, getMessagesWithTenant };
+// POST /messages/upload-image
+// Dùng chung cho cả Tenant lẫn Admin: upload ảnh chat lên Cloudinary,
+// trả về URL để client gửi tiếp qua socket ("send_message" với type="image").
+// Route này KHÔNG tạo Message trong DB — việc lưu Message vẫn do socket
+// "send_message" đảm nhiệm, tránh bị lưu 2 lần.
+const uploadChatImage = async (req, res) => {
+  try {
+    if (!req.file) {
+      return sendError(res, "Không có file ảnh nào được gửi lên", 400);
+    }
+
+    // multer-storage-cloudinary gắn URL đã upload vào req.file.path
+    return success(
+      res,
+      { imageUrl: req.file.path, publicId: req.file.filename },
+      "Tải ảnh lên thành công",
+    );
+  } catch (err) {
+    return sendError(res, err.message);
+  }
+};
+
+module.exports = {
+  getConversations,
+  getMyMessages,
+  getMessagesWithTenant,
+  uploadChatImage,
+};

@@ -55,6 +55,22 @@ const maintenanceStorage = new CloudinaryStorage({
   },
 });
 
+// Storage cho ảnh chat (tenant <-> admin)
+// req.user tồn tại với Tenant (từ JWT thật), với Admin có thể không có "id" DB
+// nên fallback sang "admin" để tránh lỗi khi build public_id.
+const chatImageStorage = new CloudinaryStorage({
+  cloudinary,
+  params: {
+    folder: "smartboarding/chat",
+    allowed_formats: ["jpg", "jpeg", "png", "webp"],
+    transformation: [{ width: 1600, crop: "limit" }],
+    public_id: (req) => {
+      const uid = req.user?.role === "Tenant" ? req.user._id : "admin";
+      return `chat_${uid}_${Date.now()}`;
+    },
+  },
+});
+
 const uploadAvatar = multer({
   storage: avatarStorage,
   limits: { fileSize: 5 * 1024 * 1024 }, // 5MB
@@ -70,10 +86,17 @@ const uploadMaintenance = multer({
   limits: { fileSize: 10 * 1024 * 1024 },
 });
 
+// Giới hạn 8MB, đủ cho ảnh chụp từ điện thoại nhưng không quá nặng khi gửi qua chat
+const uploadChatImage = multer({
+  storage: chatImageStorage,
+  limits: { fileSize: 8 * 1024 * 1024 },
+});
+
 module.exports = {
   cloudinary,
   uploadAvatar,
   uploadMeter,
   uploadMaintenance,
   uploadMeterReading,
+  uploadChatImage,
 };
