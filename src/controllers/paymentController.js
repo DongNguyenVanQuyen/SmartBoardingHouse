@@ -13,10 +13,25 @@ const generateQRData = (invoice, tenant, amount) => {
 // Tạo phiên thanh toán (chưa xử lý ngay) — trả về qrUrl để hiển thị QR
 const createPaymentSession = async (req, res) => {
   try {
+    console.log("PAYMENT BODY:", req.body); // TODO: xoá log này khi đã fix xong
+
     const { invoiceId, amount, method = "qr" } = req.body;
 
-    if (!invoiceId || !amount) {
+    // Kiểm tra thiếu field (0 vẫn được coi là có gửi, chỉ chặn khi undefined/null)
+    if (
+      !invoiceId ||
+      amount === undefined ||
+      amount === null ||
+      amount === ""
+    ) {
       return sendError(res, "Thiếu thông tin thanh toán", 400);
+    }
+
+    const numericAmount = Number(amount);
+
+    // Kiểm tra giá trị hợp lệ (tách riêng khỏi lỗi "thiếu")
+    if (isNaN(numericAmount) || numericAmount <= 0) {
+      return sendError(res, "Số tiền thanh toán không hợp lệ", 400);
     }
 
     const invoice = await Invoice.findOne({
@@ -29,7 +44,7 @@ const createPaymentSession = async (req, res) => {
       return sendError(res, "Hóa đơn đã được thanh toán", 400);
 
     const remaining = invoice.totalAmount - invoice.paidAmount;
-    if (amount > remaining) {
+    if (numericAmount > remaining) {
       return sendError(
         res,
         `Số tiền thanh toán vượt quá số còn lại: ${remaining}`,
@@ -37,12 +52,12 @@ const createPaymentSession = async (req, res) => {
       );
     }
 
-    const qrData = generateQRData(invoice, req.user, amount);
+    const qrData = generateQRData(invoice, req.user, numericAmount);
 
     const payment = await Payment.create({
       tenant: req.user._id,
       invoice: invoiceId,
-      amount,
+      amount: numericAmount,
       method,
       qrData,
       status: "pending",

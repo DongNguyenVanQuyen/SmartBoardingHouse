@@ -33,7 +33,7 @@ const MaintenanceRequestSchema = new mongoose.Schema(
     resolvedAt: { type: Date },
     adminNote: { type: String }, // Ghi chú từ admin
   },
-  { timestamps: true },
+  { timestamps: true, versionKey: false },
 );
 
 module.exports = mongoose.model("MaintenanceRequest", MaintenanceRequestSchema);

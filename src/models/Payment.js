@@ -34,7 +34,7 @@ const PaymentSchema = new mongoose.Schema(
     paidAt: { type: Date },
     note: { type: String },
   },
-  { timestamps: true },
+  { timestamps: true, versionKey: false },
 );
 
 module.exports = mongoose.model("Payment", PaymentSchema);

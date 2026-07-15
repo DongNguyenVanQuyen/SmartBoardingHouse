@@ -21,7 +21,7 @@ const NotificationSchema = new mongoose.Schema(
     isRead: { type: Boolean, default: false },
     readAt: { type: Date },
   },
-  { timestamps: true },
+  { timestamps: true, versionKey: false },
 );
 
 NotificationSchema.index({ tenant: 1, createdAt: -1 });

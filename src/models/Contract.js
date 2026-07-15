@@ -26,7 +26,10 @@ const ContractSchema = new mongoose.Schema(
     terms: { type: String }, // Điều khoản hợp đồng
     signedDate: { type: Date, default: Date.now },
   },
-  { timestamps: true },
+  {
+    timestamps: true,
+    versionKey: false,
+  },
 );
 
 module.exports = mongoose.model("Contract", ContractSchema);

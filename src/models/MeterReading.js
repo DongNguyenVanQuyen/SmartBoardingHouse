@@ -23,7 +23,7 @@ const MeterReadingSchema = new mongoose.Schema(
     ocrRawText: { type: String }, // Raw text từ OCR
     isVerified: { type: Boolean, default: false },
   },
-  { timestamps: true },
+  { timestamps: true, versionKey: false },
 );
 
 // Tự tính usage và totalCost

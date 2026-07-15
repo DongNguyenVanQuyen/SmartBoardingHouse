@@ -45,7 +45,7 @@ const InvoiceSchema = new mongoose.Schema(
     },
     note: { type: String },
   },
-  { timestamps: true },
+  { timestamps: true, versionKey: false },
 );
 
 // Tự tính totalAmount = roomPrice + điện + nước + dịch vụ + tổng items phụ

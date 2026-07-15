@@ -10,7 +10,7 @@ const FloorSchema = new mongoose.Schema(
     // Room.countDocuments({ floor: this._id }) để tránh lệch dữ liệu
     // với phía Admin (Admin cũng phải tính runtime, không cache field này).
   },
-  { timestamps: true },
+  { timestamps: true, versionKey: false },
 );
 
 module.exports = mongoose.model("Floor", FloorSchema);

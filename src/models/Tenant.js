@@ -30,7 +30,7 @@ const TenantSchema = new mongoose.Schema(
     resetOtp: { type: String, default: null, select: false },
     resetOtpExpiry: { type: Date, default: null, select: false },
   },
-  { timestamps: true },
+  { timestamps: true, versionKey: false },
 );
 
 TenantSchema.pre("save", async function () {

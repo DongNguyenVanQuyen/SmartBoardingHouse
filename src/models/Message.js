@@ -18,7 +18,7 @@ const MessageSchema = new mongoose.Schema(
     isRead: { type: Boolean, default: false },
     readAt: { type: Date },
   },
-  { timestamps: true },
+  { timestamps: true, versionKey: false },
 );
 
 MessageSchema.index({ conversationId: 1, createdAt: 1 });
