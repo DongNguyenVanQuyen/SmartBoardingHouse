@@ -14,7 +14,9 @@ const firebase = require("./src/configs/firebase");
 
 // Jobs
 const { startDebtReminderJob } = require("./src/jobs/debtReminderJob");
-const { startInvoiceGenerationJob } = require("./jobs/invoiceGenerationJob");
+const {
+  startInvoiceGenerationJob,
+} = require("./src/jobs/invoiceGenerationJob");
 
 // Routes
 const authRoutes = require("./src/routes/authRoutes.js");
