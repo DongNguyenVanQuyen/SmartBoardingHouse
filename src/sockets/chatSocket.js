@@ -25,7 +25,7 @@ const initChatSocket = (io) => {
       // Với admin: decoded từ .env credentials, không có _id thật trong DB
       socket.user = {
         role: decoded.role,
-        _id: decoded.role === "Tenant" ? decoded._id : null,
+        _id: decoded.role === "Tenant" ? decoded.id : null,
       };
 
       next();
