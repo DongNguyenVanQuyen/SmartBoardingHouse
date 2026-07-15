@@ -2,81 +2,86 @@
 const express = require("express");
 const router = express.Router();
 const { protect } = require("../middlewares/auth");
-const { uploadMaintenance } = require("../configs/cloudinary");
 const {
-  createRequest,
-  getRequests,
-  getRequestById,
-} = require("../controllers/maintenanceController");
+  getNotifications,
+  markAsRead,
+  updateFCMToken,
+} = require("../controllers/notificationController");
 
 /**
  * @swagger
  * tags:
- *   name: Maintenance
- *   description: Yêu cầu sửa chữa
+ *   name: Notifications
+ *   description: Thông báo
  */
 
 /**
  * @swagger
- * /maintenance-requests:
- *   post:
- *     summary: Tạo yêu cầu sửa chữa
- *     tags: [Maintenance]
+ * /notifications:
+ *   get:
+ *     summary: Lấy danh sách thông báo
+ *     tags: [Notifications]
+ *     parameters:
+ *       - in: query
+ *         name: page
+ *         schema:
+ *           type: integer
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *       - in: query
+ *         name: isRead
+ *         schema:
+ *           type: boolean
+ *     responses:
+ *       200:
+ *         description: Danh sách thông báo
+ */
+router.get("/", protect, getNotifications);
+
+/**
+ * @swagger
+ * /notifications/read:
+ *   put:
+ *     summary: Đánh dấu thông báo đã đọc
+ *     tags: [Notifications]
  *     requestBody:
  *       content:
- *         multipart/form-data:
+ *         application/json:
  *           schema:
  *             type: object
- *             required: [title, description]
  *             properties:
- *               title: { type: string }
- *               description: { type: string }
- *               priority:
- *                 type: string
- *                 enum: [low, medium, high]
- *               category:
- *                 type: string
- *                 enum: [electrical, plumbing, furniture, other]
- *               images:
+ *               notificationIds:
  *                 type: array
  *                 items:
  *                   type: string
- *                   format: binary
- *     responses:
- *       201:
- *         description: Gửi yêu cầu thành công
- *   get:
- *     summary: Danh sách yêu cầu
- *     tags: [Maintenance]
- *     parameters:
- *       - in: query
- *         name: status
- *         schema:
- *           type: string
- *           enum: [pending, processing, completed, cancelled]
+ *               all:
+ *                 type: boolean
  *     responses:
  *       200:
- *         description: Danh sách yêu cầu
+ *         description: Đã đọc thông báo
  */
-router.post("/", protect, uploadMaintenance.array("images", 5), createRequest);
-router.get("/", protect, getRequests);
+router.put("/read", protect, markAsRead);
 
 /**
  * @swagger
- * /maintenance-requests/{id}:
- *   get:
- *     summary: Chi tiết yêu cầu sửa chữa
- *     tags: [Maintenance]
- *     parameters:
- *       - in: path
- *         name: id
- *         required: true
- *         schema:
- *           type: string
+ * /notifications/fcm-token:
+ *   put:
+ *     summary: Cập nhật FCM token
+ *     tags: [Notifications]
+ *     requestBody:
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [fcmToken]
+ *             properties:
+ *               fcmToken: { type: string }
  *     responses:
  *       200:
- *         description: Thông tin yêu cầu
+ *         description: Cập nhật FCM token thành công
  */
-router.get("/:id", protect, getRequestById);
+router.put("/fcm-token", protect, updateFCMToken);
 
 module.exports = router;
