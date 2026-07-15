@@ -51,4 +51,4 @@ TenantSchema.methods.toJSON = function () {
   return obj;
 };
 
-module.exports = mongoose.model("Tenant", TenantSchema, "Users");
+module.exports = mongoose.model("Tenant", TenantSchema, "users");

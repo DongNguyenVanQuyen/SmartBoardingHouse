@@ -9,7 +9,7 @@ const Payment = require("./src/models/Payment");
 const MeterReading = require("./src/models/MeterReading");
 const MaintenanceRequest = require("./src/models/MaintenanceRequest");
 
-const TENANT_ID = "6a54f9a73d2533b3cccbaa18"; // ID cũ cần xóa
+const TENANT_ID = "6a57b630b5cf8630fa15bea0"; // ID cũ cần xóa
 
 async function clearSeed() {
   try {

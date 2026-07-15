@@ -21,7 +21,14 @@ const protect = async (req, res, next) => {
       return error(res, "Tài khoản không tồn tại hoặc đã bị khóa", 401);
     }
 
-    req.user = tenant;
+    // Role ("Tenant"/"Admin") không tồn tại trong document DB — nó chỉ được
+    // ký trong JWT lúc login (xem utils/jwt.js: generateAccessToken(id, role)).
+    // Vì vậy PHẢI lấy role từ decoded token, không được gán thẳng document
+    // Mongoose vào req.user (sẽ khiến req.user.role luôn undefined -> mọi
+    // check "role !== 'Tenant'" fail -> 403 dù token hợp lệ).
+    req.user = tenant.toObject();
+    req.user.role = decoded.role || "Tenant";
+
     next();
   } catch (err) {
     if (err.name === "TokenExpiredError") {
