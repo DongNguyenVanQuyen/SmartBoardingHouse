@@ -24,42 +24,18 @@ const generateInvoice = async (tenantId, roomId, month, year) => {
   });
 
   const rentAmount = room.price;
-  // Nếu chưa có chỉ số -> mặc định 0, có rồi thì tính lại đúng giá trị mới
   const electricAmount = electricReading ? electricReading.totalCost : 0;
   const waterAmount = waterReading ? waterReading.totalCost : 0;
 
-  const items = [
-    {
-      name: "Tiền phòng",
-      quantity: 1,
-      unitPrice: rentAmount,
-      total: rentAmount,
-    },
-  ];
+  // ⚠️ QUAN TRỌNG: KHÔNG đẩy "Tiền phòng/điện/nước" vào items[] nữa.
+  // Model Invoice có pre("save") hook tự tính lại totalAmount bằng:
+  //   roomPrice + electricTotal + waterTotal + serviceFee + itemsTotal
+  // Nếu items[] cũng chứa lại 3 khoản này thì bị CỘNG TRÙNG (nhân đôi tiền).
+  // items[] giờ chỉ dùng cho phụ phí phát sinh khác (không phải phòng/điện/nước).
+  const items = [];
 
-  if (electricReading) {
-    items.push({
-      name: "Tiền điện",
-      quantity: electricReading.usage,
-      unitPrice: electricReading.unitPrice,
-      total: electricReading.totalCost,
-    });
-  }
-
-  if (waterReading) {
-    items.push({
-      name: "Tiền nước",
-      quantity: waterReading.usage,
-      unitPrice: waterReading.unitPrice,
-      total: waterReading.totalCost,
-    });
-  }
-
-  // luôn tính lại totalAmount = tiền phòng + điện + nước
   const totalAmount = rentAmount + electricAmount + waterAmount;
 
-  // Các field chi tiết khớp model mới (để Admin/.NET đọc đúng số liệu,
-  // không phải suy ra từ items nữa)
   const detailFields = {
     roomPrice: rentAmount,
     electricUsage: electricReading ? electricReading.usage : 0,
@@ -86,7 +62,8 @@ const generateInvoice = async (tenantId, roomId, month, year) => {
   if (invoice) {
     invoice.items = items;
     Object.assign(invoice, detailFields);
-    invoice.totalAmount = totalAmount;
+    // Không set invoice.totalAmount thủ công — pre("save") hook của Invoice
+    // model sẽ tự tính lại đúng từ detailFields + items (giờ rỗng, không trùng nữa).
     await invoice.save();
     return invoice;
   } else {
@@ -100,20 +77,19 @@ const generateInvoice = async (tenantId, roomId, month, year) => {
       dueDate: new Date(year, month - 1, 25),
       items,
       ...detailFields,
-      totalAmount,
+      // Không truyền totalAmount ở đây nữa — hook pre("save") tự tính.
     });
   }
 };
+
 // Chạy cho TẤT CẢ hợp đồng đang active, dùng cho cron ngày 15 hàng tháng
 const generateMonthlyInvoicesForAllRooms = async (month, year) => {
-  // TODO: đổi field trạng thái cho khớp Contract thật (vd: status: "active", isActive: true...)
   const activeContracts = await Contract.find({ status: "active" });
 
   const results = { success: 0, failed: [] };
 
   for (const contract of activeContracts) {
     try {
-      // TODO: đổi tên field nếu Contract lưu tenant/room khác tên (vd: contract.tenantId, contract.roomId)
       await generateInvoice(contract.tenant, contract.room, month, year);
       results.success++;
     } catch (err) {

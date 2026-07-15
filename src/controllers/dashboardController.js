@@ -4,22 +4,16 @@ const Invoice = require("../models/Invoice");
 const Contract = require("../models/Contract");
 const MaintenanceRequest = require("../models/MaintenanceRequest");
 const Notification = require("../models/Notification");
+const { generateInvoice } = require("../services/invoiceService");
 const { success, error: sendError } = require("../utils/response");
 
 const getDashboard = async (req, res) => {
   try {
     const now = new Date();
-    let currentMonth = now.getMonth() + 7;
-    let currentYear = now.getFullYear() + 1;
+    const currentMonth = now.getMonth() + 6;
+    const currentYear = now.getFullYear() + 1;
 
-    // Nếu tenant đang ở chế độ test (đã bấm nút qua tháng / đặt tháng thủ công
-    // ở màn debug), dùng tháng test thay vì tháng thật.
-    if (req.user.testMonth && req.user.testYear) {
-      currentMonth = req.user.testMonth;
-      currentYear = req.user.testYear;
-    }
-
-    // 1. Lấy contract
+    // 1. Lấy contract trước
     const contract = await Contract.findOne({
       tenant: req.user._id,
       status: "active",
@@ -28,9 +22,22 @@ const getDashboard = async (req, res) => {
       populate: { path: "floor", select: "name floorNumber" },
     });
 
-    // 2. Chỉ ĐỌC dữ liệu, không tự tạo/sửa hóa đơn ở đây nữa —
-    // việc tạo hóa đơn hàng tháng do cron job (invoiceGenerationJob)
-    // hoặc nút debug (admin.js) đảm nhiệm, không phải dashboard.
+    // 2. ⭐ Đợi generateInvoice xong rồi mới query, để đảm bảo có dữ liệu mới nhất
+    if (contract?.room?._id) {
+      try {
+        await generateInvoice(
+          req.user._id,
+          contract.room._id,
+          currentMonth,
+          currentYear,
+        );
+      } catch (err) {
+        console.error("[INVOICE ERROR]", err);
+        // không throw để dashboard vẫn load được, chỉ log lỗi
+      }
+    }
+
+    // 3. Giờ mới query — invoice chắc chắn đã tồn tại (nếu có contract)
     const [
       currentInvoice,
       unpaidCount,
