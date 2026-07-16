@@ -2,25 +2,21 @@ const mongoose = require("mongoose");
 
 const MessageSchema = new mongoose.Schema(
   {
-    // Luôn có dạng `${adminId}_${tenantId}` — cố định vị trí adminId trước,
-    // bất kể ai là người gửi, để 1 cuộc hội thoại (Admin <-> 1 Tenant) luôn
-    // ứng với đúng 1 conversationId duy nhất.
+    // Bằng đúng _id của Tenant tham gia cuộc trò chuyện (khớp với bên Admin C#).
+    // Vì hệ thống chỉ có 1 Admin (hardcoded), 1 cuộc hội thoại = 1 Tenant,
+    // nên không cần ghép thêm adminId vào conversationId nữa.
     conversationId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Tenant",
+      required: true,
+    },
+    senderRole: {
       type: String,
-      required: true,
-    },
-    sender: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "Tenant",
-      required: true,
-    },
-    receiver: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "Tenant",
+      enum: ["Admin", "Tenant"],
       required: true,
     },
     content: { type: String, required: true },
-    type: { type: String, enum: ["text", "image"], default: "text" },
+    type: { type: String, enum: ["Text", "Image"], default: "Text" },
     imageUrl: { type: String },
     isRead: { type: Boolean, default: false },
     readAt: { type: Date },
