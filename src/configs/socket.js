@@ -81,21 +81,20 @@ const setupSocket = (io) => {
         io.to(room).emit("new_message", message);
         ack({ success: true, data: message });
 
-        // Xác định người nhận để quyết định có cần tạo Notification hay không
-        const receiverSocketId =
-          role === "Tenant" ? onlineAdminSocketId : onlineUsers.get(tenantId);
-
-        if (!receiverSocketId) {
-          await Notification.create({
-            tenant: tenantId,
-            title: role === "Tenant" ? "Tin nhắn mới" : "Tin nhắn mới từ quản lý",
-            body:
-              (role === "Tenant" ? `${socket.user.fullName}: ` : "") +
-              content.substring(0, 50),
-            type: "message",
-            refId: message._id,
-            refModel: "Message",
-          });
+        // Chỉ tạo Notification khi người NHẬN là Tenant (tức người gửi là Admin).
+        // Admin không có document Tenant nên không thể là subject của Notification.
+        if (role === "Admin") {
+          const tenantOnline = onlineUsers.get(tenantId);
+          if (!tenantOnline) {
+            await Notification.create({
+              tenant: tenantId,
+              title: "Tin nhắn mới từ quản lý",
+              body: content.substring(0, 50),
+              type: "message",
+              refId: message._id,
+              refModel: "Message",
+            });
+          }
         }
       } catch (err) {
         console.error("[Socket] send_message error:", err);
