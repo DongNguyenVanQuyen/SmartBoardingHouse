@@ -49,7 +49,7 @@ const InvoiceSchema = new mongoose.Schema(
 );
 
 // Tự tính totalAmount = roomPrice + điện + nước + dịch vụ + tổng items phụ
-InvoiceSchema.pre("save", function () {
+InvoiceSchema.pre("validate", function () {
   const electricTotal = (this.electricUsage || 0) * (this.electricPrice || 0);
   const waterTotal = (this.waterUsage || 0) * (this.waterPrice || 0);
   const itemsTotal = (this.items || []).reduce((sum, i) => sum + i.total, 0);

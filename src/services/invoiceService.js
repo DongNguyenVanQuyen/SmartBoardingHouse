@@ -43,6 +43,7 @@ const generateInvoice = async (tenantId, roomId, month, year) => {
     waterUsage: waterReading ? waterReading.usage : 0,
     waterPrice: waterReading ? waterReading.unitPrice : 0,
     serviceFee: 0,
+    totalAmount, // KHÔNG set totalAmount thủ công nữa — pre("save") hook tự tính.
   };
 
   console.log(
