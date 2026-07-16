@@ -215,12 +215,12 @@ const createMeterReading = async (req, res) => {
 
     // Ảnh có thể đến từ upload trực tiếp (req.file) hoặc imageUrl từ bước /scan
     const finalImageUrl = req.file?.path || imageUrl || null;
-    if (!finalImageUrl)
-      return sendError(
-        res,
-        "Vui lòng chụp ảnh công tơ để Admin đối chiếu",
-        400,
-      );
+    // if (!finalImageUrl)
+    //   return sendError(
+    //     res,
+    //     "Vui lòng chụp ảnh công tơ để Admin đối chiếu",
+    //     400,
+    //   );
 
     const contract = await Contract.findOne({
       tenant: req.user._id,
