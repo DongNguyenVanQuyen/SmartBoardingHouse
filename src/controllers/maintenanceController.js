@@ -3,6 +3,7 @@ const Contract = require("../models/Contract");
 const Room = require("../models/Room");
 const Notification = require("../models/Notification");
 const { success, error: sendError } = require("../utils/response");
+const { normalizeMaintenanceRequest } = require("../utils/maintenanceEnumMap");
 
 // POST /maintenance-requests
 const createRequest = async (req, res) => {
@@ -52,16 +53,18 @@ const createRequest = async (req, res) => {
       refModel: "MaintenanceRequest",
     });
 
-    const request = await MaintenanceRequest.findById(created._id).populate({
-      path: "room",
-      select: "roomNumber floor",
-      populate: {
-        path: "floor",
-        select: "name floorNumber",
-      },
-    });
+    const request = await MaintenanceRequest.findById(created._id)
+      .populate({
+        path: "room",
+        select: "roomNumber floor",
+        populate: {
+          path: "floor",
+          select: "name floorNumber",
+        },
+      })
+      .lean();
 
-    return success(res, request, "Gửi yêu cầu sửa chữa thành công", 201);
+    return success(res, normalizeMaintenanceRequest(request), "Gửi yêu cầu sửa chữa thành công", 201);
   } catch (err) {
     return sendError(res, err.message);
   }
@@ -89,9 +92,12 @@ const getRequests = async (req, res) => {
           select: "name floorNumber",
         },
       })
-      .sort({ createdAt: -1 });
+      .sort({ createdAt: -1 })
+      .lean();
 
-    return success(res, requests, "Lấy danh sách yêu cầu thành công");
+    const normalized = requests.map(normalizeMaintenanceRequest);
+
+    return success(res, normalized, "Lấy danh sách yêu cầu thành công");
   } catch (err) {
     return sendError(res, err.message);
   }
@@ -103,20 +109,22 @@ const getRequestById = async (req, res) => {
     const request = await MaintenanceRequest.findOne({
       _id: req.params.id,
       tenant: req.user._id,
-    }).populate({
-      path: "room",
-      select: "roomNumber floor",
-      populate: {
-        path: "floor",
-        select: "name floorNumber",
-      },
-    });
+    })
+      .populate({
+        path: "room",
+        select: "roomNumber floor",
+        populate: {
+          path: "floor",
+          select: "name floorNumber",
+        },
+      })
+      .lean();
 
     if (!request) {
       return sendError(res, "Không tìm thấy yêu cầu", 404);
     }
 
-    return success(res, request, "Lấy thông tin yêu cầu thành công");
+    return success(res, normalizeMaintenanceRequest(request), "Lấy thông tin yêu cầu thành công");
   } catch (err) {
     return sendError(res, err.message);
   }
