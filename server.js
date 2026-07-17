@@ -63,6 +63,7 @@ const io = new Server(server, {
 });
 
 setupSocket(io);
+app.set("io", io);
 
 // Connect DB
 connectDB();

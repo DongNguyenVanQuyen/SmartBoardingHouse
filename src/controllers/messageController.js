@@ -1,6 +1,8 @@
 const Message = require("../models/Message");
 const { success, error: sendError } = require("../utils/response");
 
+const conversationRoom = (tenantId) => `conversation_${tenantId}`;
+
 // GET /messages — ADMIN: danh sách tất cả cuộc trò chuyện
 const getConversations = async (req, res) => {
   try {
@@ -110,6 +112,51 @@ const getMessagesWithTenant = async (req, res) => {
   }
 };
 
+// POST /messages/send — DÙNG CHUNG cho cả Admin (web) và Tenant (app), thay thế
+// hoàn toàn cho việc admin gửi tin qua backend .NET. Đây là điểm mấu chốt để
+// gộp real-time về một nguồn duy nhất: mọi tin nhắn dù gửi từ đâu đều emit
+// qua chính Socket.IO server này, nên cả 2 phía đều nhận được ngay lập tức.
+const sendMessage = async (req, res) => {
+  try {
+    const role = req.user.role;
+    const { content, type = "Text", imageUrl } = req.body;
+
+    if (!content && type === "Text") {
+      return sendError(res, "Thiếu nội dung tin nhắn", 400);
+    }
+
+    let tenantId;
+    if (role === "Tenant") {
+      tenantId = req.user._id.toString();
+    } else if (role === "Admin") {
+      tenantId = req.body.tenantId;
+      if (!tenantId) {
+        return sendError(res, "Thiếu tenantId (admin phải chỉ định đang chat với tenant nào)", 400);
+      }
+    } else {
+      return sendError(res, "Vai trò không hợp lệ", 403);
+    }
+
+    const message = await Message.create({
+      conversationId: tenantId,
+      senderRole: role,
+      content,
+      type,
+      imageUrl: imageUrl || null,
+      isRead: false,
+    });
+
+    const io = req.app.get("io");
+    if (io) {
+      io.to(conversationRoom(tenantId)).emit("new_message", message);
+    }
+
+    return success(res, message, "Gửi tin nhắn thành công");
+  } catch (err) {
+    return sendError(res, err.message);
+  }
+};
+
 // POST /messages/upload-image — không đổi
 const uploadChatImage = async (req, res) => {
   try {
@@ -130,5 +177,6 @@ module.exports = {
   getConversations,
   getMyMessages,
   getMessagesWithTenant,
+  sendMessage,
   uploadChatImage,
 };

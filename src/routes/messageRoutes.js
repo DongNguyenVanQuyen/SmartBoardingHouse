@@ -6,11 +6,10 @@ const {
   getConversations,
   getMyMessages,
   getMessagesWithTenant,
+  sendMessage,
   uploadChatImage,
 } = require("../controllers/messageController");
 
-// NOTE: đổi đường dẫn import này cho đúng với middleware xác thực JWT hiện có
-// trong project của bạn (middleware phải gán req.user = { role, _id }).
 const { protect } = require("../middlewares/auth");
 const {
   uploadChatImage: uploadChatImageMiddleware,
@@ -22,11 +21,14 @@ router.get("/", protect, getConversations);
 // TENANT: lịch sử chat của chính mình
 router.get("/me", protect, getMyMessages);
 
+// TENANT hoặc ADMIN: gửi tin nhắn qua REST (dùng cho web Admin — không có socket.io-client)
+// Tenant/app Android vẫn có thể tiếp tục dùng socket "send_message" như cũ, không bắt buộc đổi.
+router.post("/send", protect, sendMessage);
+
 // ADMIN: lịch sử chat với 1 tenant cụ thể
 router.get("/:tenantId", protect, getMessagesWithTenant);
 
-// TENANT hoặc ADMIN: upload ảnh chat lên Cloudinary, trả về imageUrl
-// Client sau đó gửi imageUrl này qua socket "send_message" (type: "image")
+// TENANT hoặc ADMIN: upload ảnh chat lên Cloudinary
 router.post(
   "/upload-image",
   protect,
