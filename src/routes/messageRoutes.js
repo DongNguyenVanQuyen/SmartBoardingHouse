@@ -16,22 +16,21 @@ const {
 } = require("../configs/cloudinary");
 
 // ADMIN: danh sách hội thoại (mỗi tenant 1 hội thoại)
-router.get("/", protect, getConversations);
+router.get("/", getConversations);
 
 // TENANT: lịch sử chat của chính mình
 router.get("/me", protect, getMyMessages);
 
 // TENANT hoặc ADMIN: gửi tin nhắn qua REST (dùng cho web Admin — không có socket.io-client)
 // Tenant/app Android vẫn có thể tiếp tục dùng socket "send_message" như cũ, không bắt buộc đổi.
-router.post("/send", protect, sendMessage);
+router.post("/send", sendMessage);
 
 // ADMIN: lịch sử chat với 1 tenant cụ thể
-router.get("/:tenantId", protect, getMessagesWithTenant);
+router.get("/:tenantId", getMessagesWithTenant);
 
 // TENANT hoặc ADMIN: upload ảnh chat lên Cloudinary
 router.post(
   "/upload-image",
-  protect,
   uploadChatImageMiddleware.single("image"),
   uploadChatImage,
 );
