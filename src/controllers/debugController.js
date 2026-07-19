@@ -8,10 +8,6 @@ const { success, error: sendError } = require("../utils/response");
 // (mặc định là tháng/năm hiện tại nếu không truyền lên) — dùng để test "qua tháng mới".
 const clearMonthData = async (req, res) => {
   try {
-    if (process.env.NODE_ENV === "production") {
-      return sendError(res, "Chức năng debug không khả dụng ở production", 403);
-    }
-
     const tenantId = req.user._id;
     const now = new Date();
     const month = req.body.month || now.getMonth() + 1;
