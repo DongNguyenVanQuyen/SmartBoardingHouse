@@ -6,6 +6,8 @@ const Payment = require("./src/models/Payment");
 const MeterReading = require("./src/models/MeterReading");
 
 const TENANT_ID = "6a57b9b91781a515545c4ab9";
+const MONTH = 7;
+const YEAR = 2026;
 
 async function clearJuly2026() {
   try {
@@ -18,8 +20,8 @@ async function clearJuly2026() {
     // 1. Lấy hóa đơn tháng 7/2026
     const invoices = await Invoice.find({
       tenant: TENANT_ID,
-      month: 7,
-      year: 2026,
+      month: MONTH,
+      year: YEAR,
     });
 
     const invoiceIds = invoices.map((i) => i._id);
@@ -32,24 +34,24 @@ async function clearJuly2026() {
     // 3. Xóa Invoice tháng 7/2026
     const invoiceResult = await Invoice.deleteMany({
       tenant: TENANT_ID,
-      month: 7,
-      year: 2026,
+      month: MONTH,
+      year: YEAR,
     });
 
     // 4. Xóa chỉ số điện
     const electricResult = await MeterReading.deleteMany({
       tenant: TENANT_ID,
       type: "electric",
-      month: 7,
-      year: 2026,
+      month: MONTH,
+      year: YEAR,
     });
 
     // 5. Xóa chỉ số nước
     const waterResult = await MeterReading.deleteMany({
       tenant: TENANT_ID,
       type: "water",
-      month: 7,
-      year: 2026,
+      month: MONTH,
+      year: YEAR,
     });
 
     console.log("\n===== DONE =====");

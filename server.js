@@ -114,6 +114,7 @@ app.use("/api/statistics", statisticsRoutes);
 app.use("/api/reports", reportRoutes);
 app.use("/api", adminRoutes);
 app.use("/api/internal", internalRoutes);
+app.use("/api/debug", require("./src/routes/debugRoutes"));
 
 // 404 handler
 app.use((req, res) => {
