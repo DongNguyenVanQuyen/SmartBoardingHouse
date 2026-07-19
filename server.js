@@ -34,6 +34,7 @@ const dashboardRoutes = require("./src/routes/dashboardRoutes.js");
 const statisticsRoutes = require("./src/routes/statisticsRoutes.js");
 const reportRoutes = require("./src/routes/reportRoutes.js");
 const internalRoutes = require("./src/routes/internalRoutes.js");
+const debugRoutes = require("./src/routes/debugRoutes.js");
 
 const adminRoutes = require("./src/routes/admin.js");
 
@@ -114,7 +115,7 @@ app.use("/api/statistics", statisticsRoutes);
 app.use("/api/reports", reportRoutes);
 app.use("/api", adminRoutes);
 app.use("/api/internal", internalRoutes);
-app.use("/api/debug", require("./src/routes/debugRoutes"));
+app.use("/api/debug", debugRoutes);
 
 // 404 handler
 app.use((req, res) => {
