@@ -35,7 +35,7 @@ const getConversations = async (req, res) => {
       { $sort: { "lastMessage.createdAt": -1 } },
       {
         $lookup: {
-          from: "tenants",
+          from: "users",
           localField: "_id",
           foreignField: "_id",
           as: "tenant",
