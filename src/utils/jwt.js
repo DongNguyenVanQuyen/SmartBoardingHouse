@@ -1,4 +1,4 @@
-//src/utils/jwt.js
+// src/utils/jwt.js
 const jwt = require("jsonwebtoken");
 
 // Ký access token, luôn kèm role ("Tenant" | "Admin") để middleware xác thực
@@ -15,12 +15,26 @@ const generateRefreshToken = (tenantId, role = "Tenant") => {
   });
 };
 
+// Đăng nhập (Admin lẫn Tenant) hiện được xử lý HOÀN TOÀN bên .NET (AuthController),
+// không phải Node. Token do .NET phát hành có claim dạng ClaimTypes.NameIdentifier /
+// ClaimTypes.Role, và JwtSecurityTokenHandler bên .NET tự động đổi tên các claim này
+// thành "nameid" / "role" khi ghi vào JWT (không phải "id"/"sub"). Nên ở đây cần chuẩn
+// hoá lại decoded payload để phần còn lại của code Node (protect, socket.js) vẫn dùng
+// decoded.id / decoded.role như cũ, bất kể token đến từ .NET hay (trước đây) từ chính Node.
+const normalizeDecoded = (decoded) => ({
+  ...decoded,
+  id: decoded.id || decoded.nameid || decoded.sub,
+  role: decoded.role || decoded["http://schemas.microsoft.com/ws/2008/06/identity/claims/role"],
+});
+
 const verifyAccessToken = (token) => {
-  return jwt.verify(token, process.env.JWT_SECRET);
+  const decoded = jwt.verify(token, process.env.JWT_SECRET);
+  return normalizeDecoded(decoded);
 };
 
 const verifyRefreshToken = (token) => {
-  return jwt.verify(token, process.env.JWT_REFRESH_SECRET);
+  const decoded = jwt.verify(token, process.env.JWT_REFRESH_SECRET);
+  return normalizeDecoded(decoded);
 };
 
 module.exports = {
