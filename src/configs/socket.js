@@ -15,13 +15,18 @@ const setupSocket = (io) => {
       if (!token) return next(new Error("Không có token"));
 
       const decoded = verifyAccessToken(token);
+      console.log("[DEBUG socket] decoded payload:", decoded); // <-- thêm dòng này
+
       const tenant = await Tenant.findById(decoded.id).select("-password");
+      console.log("[DEBUG socket] tenant found:", tenant); // <-- thêm dòng này
+
       if (!tenant) return next(new Error("Tenant không tồn tại"));
       if (!tenant.isActive) return next(new Error("Tài khoản đã bị khóa"));
 
       socket.user = tenant;
       next();
     } catch (err) {
+      console.log("[DEBUG socket] lỗi verify:", err.message); // <-- thêm dòng này
       next(new Error("Token không hợp lệ"));
     }
   });
