@@ -1,26 +1,9 @@
 // src/services/debtReminderService.js
-const { messaging } = require("../configs/firebase");
 const Invoice = require("../models/Invoice");
 const Notification = require("../models/Notification");
+const { createAndPushNotification } = require("./notificationService");
 
 const DAYS_BEFORE_DUE = 3; // nhắc trước 3 ngày đến hạn
-
-// Gửi push FCM cho 1 tenant (nếu có fcmToken)
-const sendPushToTenant = async (tenant, title, body, data = {}) => {
-  if (!tenant.fcmToken || !messaging) return;
-
-  try {
-    await messaging.send({
-      token: tenant.fcmToken,
-      notification: { title, body },
-      data: Object.fromEntries(
-        Object.entries(data).map(([k, v]) => [k, String(v)]),
-      ),
-    });
-  } catch (err) {
-    console.error(`Gửi FCM thất bại cho tenant ${tenant._id}:`, err.message);
-  }
-};
 
 // Kiểm tra đã tạo notification cho invoice này, subType này, trong hôm nay chưa (tránh gửi trùng)
 const alreadyNotifiedToday = async (invoiceId, subType) => {
@@ -68,7 +51,7 @@ const notifyUpcomingDue = async () => {
       "vi-VN",
     )}đ) sẽ đến hạn trong ${DAYS_BEFORE_DUE} ngày nữa.`;
 
-    await Notification.create({
+    await createAndPushNotification({
       tenant: invoice.tenant._id,
       title,
       body,
@@ -76,11 +59,7 @@ const notifyUpcomingDue = async () => {
       refId: invoice._id,
       refModel: "Invoice",
       meta: { subType: "upcoming" },
-    });
-
-    await sendPushToTenant(invoice.tenant, title, body, {
-      type: "debt",
-      refId: invoice._id.toString(),
+      tenantDoc: invoice.tenant,
     });
 
     count++;
@@ -123,7 +102,7 @@ const notifyOverdue = async () => {
       "vi-VN",
     )}đ.`;
 
-    await Notification.create({
+    await createAndPushNotification({
       tenant: invoice.tenant._id,
       title,
       body,
@@ -131,11 +110,7 @@ const notifyOverdue = async () => {
       refId: invoice._id,
       refModel: "Invoice",
       meta: { subType: "overdue" },
-    });
-
-    await sendPushToTenant(invoice.tenant, title, body, {
-      type: "debt",
-      refId: invoice._id.toString(),
+      tenantDoc: invoice.tenant,
     });
 
     count++;

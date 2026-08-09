@@ -1,8 +1,8 @@
 // src/configs/socket.js
 const Message = require("../models/Message");
-const Notification = require("../models/Notification");
 const { verifyAccessToken } = require("../utils/jwt");
 const Tenant = require("../models/Tenant");
+const { createAndPushNotification } = require("../services/notificationService");
 
 const conversationRoom = (tenantId) => `conversation_${tenantId}`;
 
@@ -91,7 +91,7 @@ const setupSocket = (io) => {
         if (role === "Admin") {
           const tenantOnline = onlineUsers.get(tenantId);
           if (!tenantOnline) {
-            await Notification.create({
+            await createAndPushNotification({
               tenant: tenantId,
               title: "Tin nhắn mới từ quản lý",
               body: content.substring(0, 50),

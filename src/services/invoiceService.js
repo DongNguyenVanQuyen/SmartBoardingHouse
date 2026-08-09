@@ -3,6 +3,7 @@ const Invoice = require("../models/Invoice");
 const MeterReading = require("../models/MeterReading");
 const Room = require("../models/Room");
 const Contract = require("../models/Contract");
+const { createAndPushNotification } = require("./notificationService");
 
 const generateInvoice = async (tenantId, roomId, month, year) => {
   const room = await Room.findById(roomId);
@@ -68,7 +69,7 @@ const generateInvoice = async (tenantId, roomId, month, year) => {
     await invoice.save();
     return invoice;
   } else {
-    return await Invoice.create({
+    const newInvoice = await Invoice.create({
       invoiceNumber: `INV-${room.roomNumber}-${year}${String(month).padStart(2, "0")}`,
       tenant: tenantId,
       room: roomId,
@@ -80,6 +81,17 @@ const generateInvoice = async (tenantId, roomId, month, year) => {
       ...detailFields,
       // Không truyền totalAmount ở đây nữa — hook pre("save") tự tính.
     });
+
+    await createAndPushNotification({
+      tenant: tenantId,
+      title: "Hóa đơn mới đã được tạo",
+      body: `Hóa đơn tháng ${month}/${year} của phòng ${room.roomNumber} là ${newInvoice.totalAmount.toLocaleString("vi-VN")}đ.`,
+      type: "invoice",
+      refId: newInvoice._id,
+      refModel: "Invoice",
+    });
+
+    return newInvoice;
   }
 };
 

@@ -1,7 +1,7 @@
 const MaintenanceRequest = require("../models/MaintenanceRequest");
 const Contract = require("../models/Contract");
 const Room = require("../models/Room");
-const Notification = require("../models/Notification");
+const { createAndPushNotification } = require("../services/notificationService");
 const { success, error: sendError } = require("../utils/response");
 const { normalizeMaintenanceRequest } = require("../utils/maintenanceEnumMap");
 
@@ -44,13 +44,14 @@ const createRequest = async (req, res) => {
       images,
     });
 
-    await Notification.create({
+    await createAndPushNotification({
       tenant: req.user._id,
       title: "Yêu cầu sửa chữa đã được gửi",
       body: `Yêu cầu "${title}" đang chờ xử lý`,
       type: "maintenance",
       refId: created._id,
       refModel: "MaintenanceRequest",
+      tenantDoc: req.user,
     });
 
     const request = await MaintenanceRequest.findById(created._id)

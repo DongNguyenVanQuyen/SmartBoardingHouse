@@ -2,6 +2,7 @@
 const Payment = require("../models/Payment");
 const Invoice = require("../models/Invoice");
 const { success, error: sendError } = require("../utils/response");
+const { createAndPushNotification } = require("../services/notificationService");
 
 const BASE_URL = process.env.PUBLIC_URL || "http://localhost:8080";
 
@@ -225,6 +226,16 @@ const confirmPaymentByToken = async (req, res) => {
     invoice.status =
       invoice.paidAmount >= invoice.totalAmount ? "paid" : "partial";
     await invoice.save();
+
+    await createAndPushNotification({
+      tenant: payment.tenant,
+      title: "Thanh toán thành công",
+      body: `Đã ghi nhận thanh toán ${payment.amount.toLocaleString("vi-VN")}đ cho hóa đơn tháng ${invoice.month}/${invoice.year}.`,
+      type: "invoice",
+      refId: invoice._id,
+      refModel: "Invoice",
+      meta: { paymentId: payment._id },
+    });
 
     return success(res, { payment, invoice }, "Thanh toán thành công");
   } catch (err) {
