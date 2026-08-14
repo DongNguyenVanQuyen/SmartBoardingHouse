@@ -1,4 +1,5 @@
 const Message = require("../models/Message");
+const User = require("../models/User");
 const { success, error: sendError } = require("../utils/response");
 
 const conversationRoom = (tenantId) => `conversation_${tenantId}`;
@@ -172,6 +173,90 @@ const uploadChatImage = async (req, res) => {
     return sendError(res, err.message);
   }
 };
+// GET /messages/users — ADMIN: danh sách toàn bộ tenant, kèm cờ đã có
+// hội thoại hay chưa, để admin thấy được cả những người CHƯA nhắn tin
+// và có thể chủ động bấm vào để bắt đầu chat với họ.
+const getAllUsersForAdmin = async (req, res) => {
+  try {
+    if (req.user.role !== "Admin") {
+      return sendError(res, "Chỉ admin mới được xem danh sách người dùng", 403);
+    }
+
+    const { search = "" } = req.query;
+
+    const userFilter = { role: "Tenant" };
+    if (search) {
+      userFilter.$or = [
+        { fullName: { $regex: search, $options: "i" } },
+        { phone: { $regex: search, $options: "i" } },
+      ];
+    }
+
+    // Lấy toàn bộ tenant
+    const tenants = await User.find(userFilter)
+      .select("_id fullName phone avatar email")
+      .lean();
+
+    // Lấy danh sách những tenant đã từng có tin nhắn (để biết ai đã "có hội thoại")
+    const conversationInfos = await Message.aggregate([
+      { $sort: { createdAt: -1 } },
+      {
+        $group: {
+          _id: "$conversationId",
+          lastMessage: { $first: "$$ROOT" },
+          unreadCount: {
+            $sum: {
+              $cond: [
+                {
+                  $and: [
+                    { $eq: ["$isRead", false] },
+                    { $eq: ["$senderRole", "Tenant"] },
+                  ],
+                },
+                1,
+                0,
+              ],
+            },
+          },
+        },
+      },
+    ]);
+
+    const conversationMap = new Map(
+      conversationInfos.map((c) => [c._id.toString(), c]),
+    );
+
+    const result = tenants.map((tenant) => {
+      const conv = conversationMap.get(tenant._id.toString());
+      return {
+        _id: tenant._id,
+        fullName: tenant.fullName,
+        phone: tenant.phone,
+        avatar: tenant.avatar,
+        email: tenant.email,
+        hasConversation: !!conv,
+        lastMessage: conv ? conv.lastMessage : null,
+        unreadCount: conv ? conv.unreadCount : 0,
+      };
+    });
+
+    // Ai có tin nhắn gần nhất thì lên trước, ai chưa nhắn thì xếp theo tên
+    result.sort((a, b) => {
+      if (a.hasConversation && b.hasConversation) {
+        return (
+          new Date(b.lastMessage.createdAt) - new Date(a.lastMessage.createdAt)
+        );
+      }
+      if (a.hasConversation) return -1;
+      if (b.hasConversation) return 1;
+      return (a.fullName || "").localeCompare(b.fullName || "");
+    });
+
+    return success(res, result, "Lấy danh sách người dùng thành công");
+  } catch (err) {
+    return sendError(res, err.message);
+  }
+};
 
 module.exports = {
   getConversations,
@@ -179,4 +264,5 @@ module.exports = {
   getMessagesWithTenant,
   sendMessage,
   uploadChatImage,
+  getAllUsersForAdmin,
 };
