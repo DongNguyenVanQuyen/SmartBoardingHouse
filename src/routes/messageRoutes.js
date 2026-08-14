@@ -4,6 +4,7 @@ const router = express.Router();
 
 const {
   getConversations,
+  getAllUsersForAdmin,
   getMyMessages,
   getMessagesWithTenant,
   sendMessage,
@@ -17,6 +18,9 @@ const {
 
 // ADMIN: danh sách hội thoại (mỗi tenant 1 hội thoại)
 router.get("/", protect, getConversations);
+
+// ADMIN: danh sách toàn bộ tenant (kèm cờ hasConversation để biết ai chưa nhắn tin)
+router.get("/users", protect, getAllUsersForAdmin);
 
 // TENANT: lịch sử chat của chính mình
 router.get("/me", protect, getMyMessages);
