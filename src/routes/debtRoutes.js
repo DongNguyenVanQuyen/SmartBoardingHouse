@@ -17,11 +17,24 @@ const { runDebtReminders } = require("../services/debtReminderService");
  *   get:
  *     summary: Xem tổng công nợ
  *     tags: [Debts]
+ *     security:
+ *       - bearerAuth: []
  *     responses:
  *       200:
  *         description: Thông tin công nợ
  */
 router.get("/", protect, getDebts);
+
+/**
+ * @swagger
+ * /debts/debug/run-reminder:
+ *   get:
+ *     summary: Chạy debt reminder ngay lập tức
+ *     tags: [Debts]
+ *     responses:
+ *       200:
+ *         description: Đã chạy reminder thành công
+ */
 router.get("/debug/run-reminder", async (req, res) => {
   await runDebtReminders();
   res.json({

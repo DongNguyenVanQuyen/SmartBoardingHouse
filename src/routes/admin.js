@@ -5,6 +5,29 @@ const Contract = require("../models/Contract");
 const { generateInvoice } = require("../services/invoiceService");
 const { protect } = require("../middlewares/auth");
 
+/**
+ * @swagger
+ * tags:
+ *   name: Admin
+ *   description: Tác vụ quản trị hệ thống
+ */
+
+/**
+ * @swagger
+ * /admin/test/advance-month:
+ *   post:
+ *     summary: Tạo hóa đơn thử cho tenant khi tiến tháng
+ *     tags: [Admin]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Tạo hóa đơn test thành công
+ *       404:
+ *         description: Không tìm thấy hợp đồng active
+ *       500:
+ *         description: Lỗi server
+ */
 router.post("/admin/test/advance-month", protect, async (req, res) => {
   try {
     const contract = await Contract.findOne({
