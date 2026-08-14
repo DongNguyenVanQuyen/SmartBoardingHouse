@@ -19,31 +19,7 @@ const { protect } = require("../middlewares/auth");
  *   description: Xác thực người dùng
  */
 
-/**
- * @swagger
- * /auth/register:
- *   post:
- *     summary: Đăng ký tài khoản
- *     tags: [Auth]
- *     security: []
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             required: [fullName, email, password]
- *             properties:
- *               fullName: { type: string, example: "Nguyễn Văn A" }
- *               email: { type: string, example: "test@gmail.com" }
- *               phone: { type: string, example: "0901234567" }
- *               password: { type: string, example: "123456" }
- *     responses:
- *       201:
- *         description: Đăng ký thành công
- *       400:
- *         description: Dữ liệu không hợp lệ
- */
+
 router.post("/register", register);
 
 /**
