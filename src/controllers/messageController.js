@@ -1,5 +1,5 @@
 const Message = require("../models/Message");
-const User = require("../models/User");
+const User = require("../models/Tenant");
 const { success, error: sendError } = require("../utils/response");
 
 const conversationRoom = (tenantId) => `conversation_${tenantId}`;
@@ -184,16 +184,16 @@ const getAllUsersForAdmin = async (req, res) => {
 
     const { search = "" } = req.query;
 
-    const userFilter = { role: "Tenant" };
+    const filter = {};
     if (search) {
-      userFilter.$or = [
+      filter.$or = [
         { fullName: { $regex: search, $options: "i" } },
         { phone: { $regex: search, $options: "i" } },
       ];
     }
 
     // Lấy toàn bộ tenant
-    const tenants = await User.find(userFilter)
+    const tenants = await Tenant.find(filter)
       .select("_id fullName phone avatar email")
       .lean();
 
