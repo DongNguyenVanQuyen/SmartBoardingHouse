@@ -9,6 +9,7 @@ const {
   createMeterReading,
   updateMeterReading,
   getMeterReadingHistory,
+  getMyMeterRooms,
 } = require("../controllers/meterReadingController");
 
 /**
@@ -17,6 +18,22 @@ const {
  *   name: MeterReadings
  *   description: Chỉ số điện / nước — chụp ảnh, Gemini AI đọc số, người dùng xác nhận rồi lưu
  */
+
+/**
+ * @swagger
+ * /meter-readings/rooms:
+ *   get:
+ *     summary: Danh sách phòng (theo hợp đồng active) để chọn khi ghi chỉ số
+ *     description: >
+ *       Dùng cho màn hình chọn phòng khi tenant có từ 2 hợp đồng đang thuê trở lên.
+ *       Nếu tenant chỉ có 1 hợp đồng thì không bắt buộc gọi API này — các API
+ *       khác sẽ tự dùng hợp đồng duy nhất đó.
+ *     tags: [MeterReadings]
+ *     responses:
+ *       200:
+ *         description: Danh sách phòng (contractId, roomId, roomNumber)
+ */
+router.get("/rooms", protect, getMyMeterRooms);
 
 /**
  * @swagger
@@ -33,9 +50,18 @@ const {
  *           type: string
  *           enum: [electric, water]
  *         description: Loại công tơ
+ *       - in: query
+ *         name: contract
+ *         schema:
+ *           type: string
+ *         description: >
+ *           ID hợp đồng/phòng muốn ghi chỉ số. Bắt buộc nếu tenant đang có từ
+ *           2 hợp đồng active trở lên (lấy từ GET /meter-readings/rooms).
  *     responses:
  *       200:
  *         description: Thông tin chỉ số kỳ trước
+ *       400:
+ *         description: Tenant có nhiều phòng — cần chọn phòng (kèm danh sách phòng trong errors.contracts)
  *       404:
  *         description: Tenant chưa có phòng đang thuê
  */
@@ -63,6 +89,11 @@ router.get("/previous", protect, getPreviousReading);
  *               type:
  *                 type: string
  *                 enum: [electric, water]
+ *               contract:
+ *                 type: string
+ *                 description: >
+ *                   ID hợp đồng/phòng muốn chụp. Bắt buộc nếu tenant đang có
+ *                   từ 2 hợp đồng active trở lên.
  *               image:
  *                 type: string
  *                 format: binary
@@ -71,7 +102,7 @@ router.get("/previous", protect, getPreviousReading);
  *       200:
  *         description: Trả về imageUrl + suggestedReading (Gemini đọc) + existing nếu tháng này đã gửi rồi
  *       400:
- *         description: Thiếu ảnh hoặc loại công tơ
+ *         description: Thiếu ảnh, loại công tơ, hoặc tenant có nhiều phòng cần chọn phòng
  */
 router.post(
   "/scan",
@@ -114,6 +145,12 @@ router.post(
  *               ocrRawText:
  *                 type: string
  *                 description: Raw text Gemini đọc được (từ bước /scan)
+ *               contract:
+ *                 type: string
+ *                 description: >
+ *                   ID hợp đồng/phòng muốn lưu chỉ số. Bắt buộc nếu tenant
+ *                   đang có từ 2 hợp đồng active trở lên (nên truyền lại
+ *                   đúng contractId đã lấy từ bước /previous hoặc /scan).
  *               image:
  *                 type: string
  *                 format: binary
@@ -122,7 +159,7 @@ router.post(
  *       201:
  *         description: Lưu thành công
  *       400:
- *         description: Thiếu thông tin / chỉ số không hợp lệ / chưa có ảnh
+ *         description: Thiếu thông tin / chỉ số không hợp lệ / chưa có ảnh / tenant có nhiều phòng cần chọn phòng
  *       409:
  *         description: Đã gửi chỉ số tháng này rồi — dùng PATCH /:id để cập nhật
  */
@@ -196,6 +233,11 @@ router.patch(
  *         name: year
  *         schema:
  *           type: integer
+ *       - in: query
+ *         name: contract
+ *         schema:
+ *           type: string
+ *         description: Lọc theo hợp đồng/phòng cụ thể
  *     responses:
  *       200:
  *         description: Danh sách chỉ số

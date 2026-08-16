@@ -16,6 +16,7 @@ const { startDebtReminderJob } = require("./src/jobs/debtReminderJob");
 const {
   startInvoiceGenerationJob,
 } = require("./src/jobs/invoiceGenerationJob");
+const { startContractStatusJob } = require("./src/jobs/contractStatusJob");
 
 // Routes
 const authRoutes = require("./src/routes/authRoutes.js");
@@ -75,6 +76,7 @@ firebase; // Initialize Firebase Admin SDK
 // Start scheduled jobs
 startDebtReminderJob();
 startInvoiceGenerationJob();
+startContractStatusJob();
 
 // Middlewares
 app.use(cors({ origin: process.env.CLIENT_URL || "*" }));

@@ -4,10 +4,27 @@ const MeterReading = require("../models/MeterReading");
 const Room = require("../models/Room");
 const Contract = require("../models/Contract");
 const { createAndPushNotification } = require("./notificationService");
+const { ensureDepositInvoice } = require("./depositInvoiceService");
 
-const generateInvoice = async (tenantId, roomId, month, year) => {
+// ⚠️ QUAN TRỌNG: contractId là bắt buộc.
+// Trước đây hàm này chỉ khớp hóa đơn theo (tenant, room, month, year) — nếu 1
+// tenant có nhiều hợp đồng (kể cả nhiều hợp đồng cùng phòng theo thời gian,
+// hoặc nhiều phòng khác nhau), các lần gọi generateInvoice cho từng hợp đồng
+// có thể bị gộp / ghi đè lên nhau, dẫn tới chỉ còn 1 hóa đơn cho cả tháng dù
+// có 2 hợp đồng. Nay bắt buộc truyền contractId và dùng nó làm khóa chính để
+// tách hóa đơn riêng biệt cho từng hợp đồng.
+const generateInvoice = async (tenantId, roomId, contractId, month, year) => {
+  if (!contractId) {
+    throw new Error(
+      "generateInvoice: thiếu contractId — bắt buộc để tách hóa đơn theo từng hợp đồng",
+    );
+  }
+
   const room = await Room.findById(roomId);
   if (!room) return;
+
+  const contract = await Contract.findById(contractId);
+  if (!contract) return;
 
   const readings = await MeterReading.find({
     tenant: tenantId,
@@ -48,15 +65,17 @@ const generateInvoice = async (tenantId, roomId, month, year) => {
   };
 
   console.log(
-    `Generating invoice for tenant ${tenantId}, room ${roomId}, month ${month}, year ${year}`,
+    `Generating invoice for tenant ${tenantId}, contract ${contractId}, room ${roomId}, month ${month}, year ${year}`,
   );
   console.log(
     `Rent: ${rentAmount}, Electric: ${electricAmount}, Water: ${waterAmount}, Total: ${totalAmount}`,
   );
 
+  // Khớp hóa đơn theo ĐÚNG hợp đồng (contract) + tháng/năm, KHÔNG chỉ theo
+  // (tenant, room) nữa — đây là chỗ fix bug 2 hợp đồng chỉ ra 1 hóa đơn.
   let invoice = await Invoice.findOne({
-    tenant: tenantId,
-    room: roomId,
+    contract: contractId,
+    type: "rent",
     month,
     year,
   });
@@ -70,10 +89,15 @@ const generateInvoice = async (tenantId, roomId, month, year) => {
     return invoice;
   } else {
     const newInvoice = await Invoice.create({
-      invoiceNumber: `INV-${room.roomNumber}-${year}${String(month).padStart(2, "0")}`,
+      // Thêm contractNumber (hoặc contractId) vào mã hóa đơn để tránh đụng độ
+      // khi 2 hợp đồng khác nhau rơi vào cùng phòng + cùng tháng/năm
+      // (ví dụ hợp đồng cũ kết thúc, hợp đồng mới ký lại cùng phòng).
+      invoiceNumber: `INV-${room.roomNumber}-${year}${String(month).padStart(2, "0")}-${String(contract._id).slice(-6)}`,
       tenant: tenantId,
       room: roomId,
+      contract: contractId,
       roomNumber: room.roomNumber,
+      type: "rent",
       month,
       year,
       dueDate: new Date(year, month - 1, 25),
@@ -95,7 +119,9 @@ const generateInvoice = async (tenantId, roomId, month, year) => {
   }
 };
 
-// Chạy cho TẤT CẢ hợp đồng đang active, dùng cho cron ngày 15 hàng tháng
+// Chạy cho TẤT CẢ hợp đồng đang active, dùng cho cron ngày 15 hàng tháng.
+// Lặp theo TỪNG hợp đồng (không gộp theo tenant/room), nên 1 tenant có nhiều
+// hợp đồng sẽ luôn nhận đủ 1 hóa đơn tiền phòng riêng cho mỗi hợp đồng.
 const generateMonthlyInvoicesForAllRooms = async (month, year) => {
   const activeContracts = await Contract.find({ status: "active" });
 
@@ -103,7 +129,18 @@ const generateMonthlyInvoicesForAllRooms = async (month, year) => {
 
   for (const contract of activeContracts) {
     try {
-      await generateInvoice(contract.tenant, contract.room, month, year);
+      await generateInvoice(
+        contract.tenant,
+        contract.room,
+        contract._id,
+        month,
+        year,
+      );
+
+      // Đảm bảo mỗi hợp đồng có đúng 1 hóa đơn tiền cọc duy nhất (tạo nếu
+      // chưa có, bỏ qua nếu đã tồn tại — xem depositInvoiceService).
+      await ensureDepositInvoice(contract);
+
       results.success++;
     } catch (err) {
       results.failed.push({ contractId: contract._id, error: err.message });

@@ -51,6 +51,7 @@ router.post("/admin/test/advance-month", protect, async (req, res) => {
     const invoice = await generateInvoice(
       req.user._id,
       contract.room,
+      contract._id,
       month,
       year,
     );

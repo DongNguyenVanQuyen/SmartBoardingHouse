@@ -25,7 +25,7 @@ const {
  *         name: status
  *         schema:
  *           type: string
- *           enum: [unpaid, partial, paid, overdue]
+ *           enum: [unpaid, partial, paid, overdue, cancelled]
  *       - in: query
  *         name: month
  *         schema:
@@ -34,6 +34,17 @@ const {
  *         name: year
  *         schema:
  *           type: integer
+ *       - in: query
+ *         name: contract
+ *         schema:
+ *           type: string
+ *         description: Lọc hóa đơn theo ID hợp đồng (để tách riêng theo từng hợp đồng)
+ *       - in: query
+ *         name: type
+ *         schema:
+ *           type: string
+ *           enum: [rent, deposit]
+ *         description: Lọc theo loại hóa đơn (tiền phòng hàng tháng / tiền cọc)
  *     responses:
  *       200:
  *         description: Danh sách hóa đơn

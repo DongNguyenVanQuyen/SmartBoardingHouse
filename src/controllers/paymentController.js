@@ -1,6 +1,7 @@
 // src/controllers/paymentController.js
 const Payment = require("../models/Payment");
 const Invoice = require("../models/Invoice");
+const Contract = require("../models/Contract");
 const { success, error: sendError } = require("../utils/response");
 const { createAndPushNotification } = require("../services/notificationService");
 
@@ -68,6 +69,28 @@ const createPaymentSession = async (req, res) => {
     if (!invoice) return sendError(res, "Không tìm thấy hóa đơn", 404);
     if (invoice.status === "paid")
       return sendError(res, "Hóa đơn đã được thanh toán", 400);
+
+    // Hóa đơn đã bị hủy (thường là hóa đơn cọc của hợp đồng đã hết hạn/bị
+    // hủy trước khi tenant kịp thanh toán) -> không cho thanh toán nữa.
+    if (invoice.status === "cancelled") {
+      return sendError(
+        res,
+        "Hóa đơn này đã bị hủy do hợp đồng liên quan đã kết thúc, không thể thanh toán",
+        400,
+      );
+    }
+
+    // Hóa đơn tiền cọc: chỉ cho thanh toán khi hợp đồng liên quan vẫn còn hiệu lực.
+    if (invoice.type === "deposit" && invoice.contract) {
+      const contract = await Contract.findById(invoice.contract);
+      if (contract && contract.status !== "active") {
+        return sendError(
+          res,
+          "Hợp đồng liên quan không còn hiệu lực, không thể thanh toán tiền cọc",
+          400,
+        );
+      }
+    }
 
     const remaining = invoice.totalAmount - invoice.paidAmount;
     if (numericAmount > remaining) {
@@ -216,6 +239,16 @@ const confirmPaymentByToken = async (req, res) => {
 
     const invoice = await Invoice.findById(payment.invoice);
     if (!invoice) return sendError(res, "Không tìm thấy hóa đơn", 404);
+
+    // Phòng trường hợp hóa đơn bị hủy (hợp đồng kết thúc) SAU khi phiên
+    // thanh toán đã được tạo nhưng TRƯỚC khi tenant xác nhận thanh toán.
+    if (invoice.status === "cancelled") {
+      return sendError(
+        res,
+        "Hóa đơn này đã bị hủy do hợp đồng liên quan đã kết thúc, không thể thanh toán",
+        400,
+      );
+    }
 
     payment.status = "success";
     payment.paidAt = new Date();

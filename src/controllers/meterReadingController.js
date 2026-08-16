@@ -104,20 +104,84 @@ const findPreviousReading = async (roomId, type, month, year) => {
 const getCurrentMonthReading = async (roomId, type, month, year) =>
   MeterReading.findOne({ room: roomId, type, month, year });
 
-// ─── GET /meter-readings/previous?type=electric ────────────────────────────────
-// Lấy chỉ số kỳ trước hiển thị sẵn khi mở form — không cho sửa
+// Xác định hợp đồng (và phòng) mà tenant muốn ghi chỉ số — hỗ trợ trường hợp
+// tenant có NHIỀU hợp đồng/phòng đang thuê cùng lúc.
+//   - Nếu client truyền contractId -> dùng đúng hợp đồng đó (phải thuộc về
+//     tenant hiện tại và đang active), rồi lấy dữ liệu phòng của hợp đồng đó.
+//   - Nếu không truyền:
+//       + Chỉ có đúng 1 hợp đồng active -> tự dùng hợp đồng đó (tương thích
+//         ngược với các bản build app cũ chưa có màn chọn phòng).
+//       + Có từ 2 hợp đồng active trở lên -> KHÔNG được tự đoán, trả lỗi kèm
+//         danh sách phòng để client hiển thị màn chọn phòng.
+const resolveActiveContract = async (tenantId, contractId) => {
+  if (contractId) {
+    const contract = await Contract.findOne({
+      _id: contractId,
+      tenant: tenantId,
+      status: "active",
+    }).populate("room", "roomNumber");
+
+    if (!contract) {
+      const err = new Error(
+        "Phòng/hợp đồng đã chọn không hợp lệ hoặc không còn hiệu lực",
+      );
+      err.statusCode = 404;
+      throw err;
+    }
+    return contract;
+  }
+
+  const activeContracts = await Contract.find({
+    tenant: tenantId,
+    status: "active",
+  }).populate("room", "roomNumber");
+
+  if (activeContracts.length === 0) {
+    const err = new Error("Bạn chưa có phòng đang thuê");
+    err.statusCode = 404;
+    throw err;
+  }
+
+  if (activeContracts.length > 1) {
+    const err = new Error(
+      "Bạn đang thuê nhiều phòng — vui lòng chọn phòng muốn ghi chỉ số",
+    );
+    err.statusCode = 400;
+    err.needsContractSelection = true;
+    err.contracts = activeContracts.map((c) => ({
+      contractId: c._id,
+      roomId: c.room?._id,
+      roomNumber: c.room?.roomNumber || c.roomNumber,
+    }));
+    throw err;
+  }
+
+  return activeContracts[0];
+};
+
+// Trả response lỗi thống nhất cho resolveActiveContract, kèm danh sách phòng
+// để client hiển thị màn chọn phòng nếu cần.
+const sendContractResolveError = (res, err) => {
+  return error(
+    res,
+    err.message,
+    err.statusCode || 400,
+    err.needsContractSelection ? { contracts: err.contracts } : null,
+  );
+};
+
+// ─── GET /meter-readings/previous?type=electric&contract=... ──────────────────
+// Lấy chỉ số kỳ trước hiển thị sẵn khi mở form — không cho sửa.
+// Tham số "contract" (tùy chọn): chọn đúng phòng/hợp đồng muốn xem, dùng khi
+// tenant có nhiều hợp đồng cùng lúc.
 const getPreviousReading = async (req, res) => {
   try {
-    const { type } = req.query;
+    const { type, contract: contractId } = req.query;
     if (!type || !["electric", "water"].includes(type)) {
       return sendError(res, "Vui lòng chọn loại công tơ (electric/water)", 400);
     }
 
-    const contract = await Contract.findOne({
-      tenant: req.user._id,
-      status: "active",
-    });
-    if (!contract) return sendError(res, "Bạn chưa có phòng đang thuê", 404);
+    const contract = await resolveActiveContract(req.user._id, contractId);
 
     const now = new Date();
     const month = now.getMonth() + 1;
@@ -134,6 +198,9 @@ const getPreviousReading = async (req, res) => {
         type,
         month,
         year,
+        contractId: contract._id,
+        roomId: contract.room?._id || contract.room,
+        roomNumber: contract.room?.roomNumber || contract.roomNumber,
         previousReading,
         alreadySubmitted: !!existing,
         existing: existing || null, // trả về để client hiển thị số + ảnh đã chụp trước đó
@@ -141,6 +208,7 @@ const getPreviousReading = async (req, res) => {
       "Lấy chỉ số tháng trước thành công",
     );
   } catch (err) {
+    if (err.statusCode) return sendContractResolveError(res, err);
     return sendError(res, err.message);
   }
 };
@@ -148,20 +216,18 @@ const getPreviousReading = async (req, res) => {
 // ─── POST /meter-readings/scan ─────────────────────────────────────────────────
 // Upload ảnh → Gemini đọc số → trả về suggestedReading để client hiển thị lên ô nhập.
 // CHƯA lưu DB. Nếu tháng này đã có chỉ số thì trả thêm existing để client hỏi người dùng.
+// Body/form field "contract" (tùy chọn): chọn phòng/hợp đồng muốn chụp — bắt
+// buộc nếu tenant đang có nhiều hợp đồng cùng lúc.
 const scanMeterImage = async (req, res) => {
   try {
     if (!req.file) return sendError(res, "Vui lòng chụp ảnh công tơ", 400);
 
-    const { type } = req.body;
+    const { type, contract: contractId } = req.body;
     if (!type || !["electric", "water"].includes(type)) {
       return sendError(res, "Vui lòng chọn loại công tơ (electric/water)", 400);
     }
 
-    const contract = await Contract.findOne({
-      tenant: req.user._id,
-      status: "active",
-    });
-    if (!contract) return sendError(res, "Bạn chưa có phòng đang thuê", 404);
+    const contract = await resolveActiveContract(req.user._id, contractId);
 
     const now = new Date();
     const month = now.getMonth() + 1;
@@ -179,6 +245,9 @@ const scanMeterImage = async (req, res) => {
       res,
       {
         imageUrl,
+        contractId: contract._id,
+        roomId: contract.room?._id || contract.room,
+        roomNumber: contract.room?.roomNumber || contract.roomNumber,
         ocrRawText: ocrResult.rawText,
         geminiNote: ocrResult.note,
         suggestedReading: ocrResult.suggestedReading,
@@ -198,15 +267,26 @@ const scanMeterImage = async (req, res) => {
         : "Không đọc được số rõ trong ảnh, vui lòng nhập tay",
     );
   } catch (err) {
+    if (err.statusCode) return sendContractResolveError(res, err);
     return sendError(res, err.message);
   }
 };
 
 // ─── POST /meter-readings ──────────────────────────────────────────────────────
 // Lưu mới chỉ số. Nếu tháng này đã có rồi → báo lỗi kèm existing (client dùng PATCH để cập nhật).
+// Body field "contract" (tùy chọn): chọn phòng/hợp đồng muốn lưu chỉ số — bắt
+// buộc nếu tenant đang có nhiều hợp đồng cùng lúc (client nên truyền lại đúng
+// contractId đã lấy từ bước /previous hoặc /scan).
 const createMeterReading = async (req, res) => {
   try {
-    const { type, currentReading, unitPrice, imageUrl, ocrRawText } = req.body;
+    const {
+      type,
+      currentReading,
+      unitPrice,
+      imageUrl,
+      ocrRawText,
+      contract: contractId,
+    } = req.body;
 
     if (!type || currentReading == null)
       return sendError(res, "Thiếu thông tin chỉ số", 400);
@@ -222,22 +302,16 @@ const createMeterReading = async (req, res) => {
     //     400,
     //   );
 
-    const contract = await Contract.findOne({
-      tenant: req.user._id,
-      status: "active",
-    });
-    if (!contract) return sendError(res, "Bạn chưa có phòng đang thuê", 404);
+    const contract = await resolveActiveContract(req.user._id, contractId);
 
     const now = new Date();
     const month = now.getMonth() + 1;
     const year = now.getFullYear();
 
-    const existing = await getCurrentMonthReading(
-      contract.room,
-      type,
-      month,
-      year,
-    );
+    const roomId = contract.room?._id || contract.room;
+    const roomNumber = contract.room?.roomNumber || contract.roomNumber;
+
+    const existing = await getCurrentMonthReading(roomId, type, month, year);
     if (existing) {
       return res.status(409).json({
         success: false,
@@ -253,7 +327,7 @@ const createMeterReading = async (req, res) => {
     }
 
     const previousReading = await findPreviousReading(
-      contract.room,
+      roomId,
       type,
       month,
       year,
@@ -271,8 +345,9 @@ const createMeterReading = async (req, res) => {
     const defaultUnitPrice = type === "electric" ? 3500 : 8000;
     const reading = await MeterReading.create({
       tenant: req.user._id,
-      room: contract.room,
-      roomNumber: contract.roomNumber,
+      room: roomId,
+      contract: contract._id,
+      roomNumber,
       type,
       currentReading: finalCurrentReading,
       previousReading,
@@ -288,11 +363,13 @@ const createMeterReading = async (req, res) => {
     await generateInvoice(
       reading.tenant,
       reading.room,
+      contract._id,
       reading.month,
       reading.year,
     );
     return success(res, reading, "Lưu chỉ số thành công", 201);
   } catch (err) {
+    if (err.statusCode) return sendContractResolveError(res, err);
     return sendError(res, err.message);
   }
 };
@@ -337,26 +414,43 @@ const updateMeterReading = async (req, res) => {
     reading.readingDate = new Date();
     await reading.save(); // pre-save hook tự tính lại usage + totalCost
 
-    // Cập nhật lại invoice tháng này theo số mới
-    await generateInvoice(
-      reading.tenant,
-      reading.room,
-      reading.month,
-      reading.year,
-    );
+    // Xác định hợp đồng để tách đúng hóa đơn: ưu tiên contract đã lưu sẵn
+    // trên chỉ số, fallback sang hợp đồng active của tenant cho phòng này
+    // (dữ liệu cũ tạo trước khi field "contract" tồn tại trên MeterReading).
+    let contractId = reading.contract;
+    if (!contractId) {
+      const fallbackContract = await Contract.findOne({
+        tenant: reading.tenant,
+        room: reading.room,
+        status: "active",
+      });
+      contractId = fallbackContract?._id;
+    }
+
+    if (contractId) {
+      // Cập nhật lại invoice tháng này theo số mới
+      await generateInvoice(
+        reading.tenant,
+        reading.room,
+        contractId,
+        reading.month,
+        reading.year,
+      );
+    }
     return success(res, reading, "Cập nhật chỉ số thành công");
   } catch (err) {
     return sendError(res, err.message);
   }
 };
 
-// ─── GET /meter-readings/history ───────────────────────────────────────────────
+// ─── GET /meter-readings/history?contract=... ──────────────────────────────────
 const getMeterReadingHistory = async (req, res) => {
   try {
-    const { type, year } = req.query;
+    const { type, year, contract } = req.query;
     const filter = { tenant: req.user._id };
     if (type) filter.type = type;
     if (year) filter.year = parseInt(year);
+    if (contract) filter.contract = contract;
 
     const readings = await MeterReading.find(filter)
       .populate("room", "roomNumber")
@@ -368,10 +462,34 @@ const getMeterReadingHistory = async (req, res) => {
   }
 };
 
+// ─── GET /meter-readings/rooms ──────────────────────────────────────────────────
+// Danh sách phòng (theo hợp đồng active) mà tenant có thể chọn để ghi chỉ số.
+// Dùng cho màn hình chọn phòng khi tenant có nhiều hợp đồng cùng lúc.
+const getMyMeterRooms = async (req, res) => {
+  try {
+    const activeContracts = await Contract.find({
+      tenant: req.user._id,
+      status: "active",
+    }).populate("room", "roomNumber floor");
+
+    const rooms = activeContracts.map((c) => ({
+      contractId: c._id,
+      contractNumber: c.contractNumber,
+      roomId: c.room?._id,
+      roomNumber: c.room?.roomNumber || c.roomNumber,
+    }));
+
+    return success(res, rooms, "Lấy danh sách phòng thành công");
+  } catch (err) {
+    return sendError(res, err.message);
+  }
+};
+
 module.exports = {
   getPreviousReading,
   scanMeterImage,
   createMeterReading,
   updateMeterReading,
   getMeterReadingHistory,
+  getMyMeterRooms,
 };

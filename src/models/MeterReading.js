@@ -9,6 +9,9 @@ const MeterReadingSchema = new mongoose.Schema(
       required: true,
     },
     room: { type: mongoose.Schema.Types.ObjectId, ref: "Room", required: true },
+    // Hợp đồng phát sinh chỉ số này — cần để generateInvoice tách đúng hóa
+    // đơn theo từng hợp đồng khi 1 tenant có nhiều hợp đồng.
+    contract: { type: mongoose.Schema.Types.ObjectId, ref: "Contract" },
     roomNumber: { type: String }, // cache hiển thị cho Admin
     type: { type: String, enum: ["electric", "water"], required: true },
     currentReading: { type: Number, required: true }, // Chỉ số hiện tại

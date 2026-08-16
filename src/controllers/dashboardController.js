@@ -28,6 +28,7 @@ const getDashboard = async (req, res) => {
         await generateInvoice(
           req.user._id,
           contract.room._id,
+          contract._id,
           currentMonth,
           currentYear,
         );
