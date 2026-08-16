@@ -1,10 +1,13 @@
 // src/controllers/dashboardController.js
 
 const Invoice = require("../models/Invoice");
-const Contract = require("../models/Contract");
 const MaintenanceRequest = require("../models/MaintenanceRequest");
 const Notification = require("../models/Notification");
 const { generateInvoice } = require("../services/invoiceService");
+const {
+  resolveSelectedContract,
+  selectRoom,
+} = require("../services/roomSelectionService");
 const { success, error: sendError } = require("../utils/response");
 
 const getDashboard = async (req, res) => {
@@ -13,14 +16,9 @@ const getDashboard = async (req, res) => {
     const currentMonth = now.getMonth() + 1;
     const currentYear = now.getFullYear();
 
-    // 1. Lấy contract trước
-    const contract = await Contract.findOne({
-      tenant: req.user._id,
-      status: "active",
-    }).populate({
-      path: "room",
-      populate: { path: "floor", select: "name floorNumber" },
-    });
+    // 1. Xác định hợp đồng/phòng đang được chọn (hỗ trợ tenant thuê nhiều
+    // phòng cùng lúc — ưu tiên phòng tenant đã chủ động chuyển tới trước đó).
+    const { contract, rooms } = await resolveSelectedContract(req.user._id);
 
     // 2. ⭐ Đợi generateInvoice xong rồi mới query, để đảm bảo có dữ liệu mới nhất
     if (contract?.room?._id) {
@@ -38,7 +36,12 @@ const getDashboard = async (req, res) => {
       }
     }
 
-    // 3. Giờ mới query — invoice chắc chắn đã tồn tại (nếu có contract)
+    // 3. Giờ mới query — invoice chắc chắn đã tồn tại (nếu có contract).
+    // Luôn khớp theo đúng contract đang chọn để không lẫn hóa đơn của phòng khác.
+    const invoiceFilter = contract
+      ? { contract: contract._id, month: currentMonth, year: currentYear }
+      : { tenant: req.user._id, month: currentMonth, year: currentYear };
+
     const [
       currentInvoice,
       unpaidCount,
@@ -46,11 +49,7 @@ const getDashboard = async (req, res) => {
       unreadNotifications,
       activeRequests,
     ] = await Promise.all([
-      Invoice.findOne({
-        tenant: req.user._id,
-        month: currentMonth,
-        year: currentYear,
-      }).populate({
+      Invoice.findOne(invoiceFilter).populate({
         path: "room",
         populate: { path: "floor", select: "name floorNumber" },
       }),
@@ -136,8 +135,19 @@ const getDashboard = async (req, res) => {
         unreadNotifications,
         activeMaintenanceRequests: activeRequests,
         contract: contract
-          ? { startDate: contract.startDate, endDate: contract.endDate }
+          ? {
+              _id: contract._id,
+              contractNumber: contract.contractNumber,
+              startDate: contract.startDate,
+              endDate: contract.endDate,
+              status: contract.status,
+            }
           : null,
+        // Danh sách phòng (theo hợp đồng active) tenant có thể chuyển tới, và
+        // cờ báo tenant có đang thuê nhiều phòng hay không, để app hiển thị
+        // nút/màn "chuyển phòng" khi cần.
+        rooms,
+        hasMultipleRooms: rooms.length > 1,
       },
       "Lấy dashboard thành công",
     );
@@ -146,4 +156,21 @@ const getDashboard = async (req, res) => {
   }
 };
 
-module.exports = { getDashboard };
+// PATCH /dashboard/select-room
+// Chuyển "phòng đang chọn" sang phòng khác dựa vào hợp đồng — hợp đồng của
+// phòng muốn chuyển tới bắt buộc phải còn hiệu lực (status "active"). Phòng
+// được chọn sẽ lưu lại trên Tenant (làm phòng hiện tại), dùng làm mặc định
+// cho chụp công tơ và cho màn hóa đơn (Invoice) — trả luôn dashboard mới nhất
+// theo phòng vừa chuyển để client không cần gọi lại API dashboard lần nữa.
+const selectDashboardRoom = async (req, res) => {
+  try {
+    const { contractId } = req.body;
+    await selectRoom(req.user._id, contractId);
+    return getDashboard(req, res);
+  } catch (err) {
+    if (err.statusCode) return sendError(res, err.message, err.statusCode);
+    return sendError(res, err.message);
+  }
+};
+
+module.exports = { getDashboard, selectDashboardRoom };

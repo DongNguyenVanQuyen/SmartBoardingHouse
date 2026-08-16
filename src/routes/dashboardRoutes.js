@@ -2,7 +2,10 @@
 const express = require("express");
 const router = express.Router();
 const { protect } = require("../middlewares/auth");
-const { getDashboard } = require("../controllers/dashboardController");
+const {
+  getDashboard,
+  selectDashboardRoom,
+} = require("../controllers/dashboardController");
 
 /**
  * @swagger
@@ -22,5 +25,29 @@ const { getDashboard } = require("../controllers/dashboardController");
  *         description: Tổng hợp dữ liệu dashboard
  */
 router.get("/", protect, getDashboard);
+
+/**
+ * @swagger
+ * /dashboard/select-room:
+ *   patch:
+ *     summary: Chuyển phòng đang chọn (dựa vào hợp đồng, hợp đồng phải còn hiệu lực)
+ *     tags: [Dashboard]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [contractId]
+ *             properties:
+ *               contractId:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Dashboard theo phòng vừa chuyển
+ *       404:
+ *         description: Hợp đồng không tồn tại hoặc không còn hiệu lực
+ */
+router.patch("/select-room", protect, selectDashboardRoom);
 
 module.exports = router;

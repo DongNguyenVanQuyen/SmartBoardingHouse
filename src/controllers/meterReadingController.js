@@ -2,6 +2,7 @@
 const MeterReading = require("../models/MeterReading");
 const { generateInvoice } = require("../services/invoiceService");
 const Contract = require("../models/Contract");
+const { resolveSelectedContract } = require("../services/roomSelectionService");
 const { success, error: sendError } = require("../utils/response");
 const axios = require("axios");
 
@@ -108,11 +109,12 @@ const getCurrentMonthReading = async (roomId, type, month, year) =>
 // tenant có NHIỀU hợp đồng/phòng đang thuê cùng lúc.
 //   - Nếu client truyền contractId -> dùng đúng hợp đồng đó (phải thuộc về
 //     tenant hiện tại và đang active), rồi lấy dữ liệu phòng của hợp đồng đó.
-//   - Nếu không truyền:
-//       + Chỉ có đúng 1 hợp đồng active -> tự dùng hợp đồng đó (tương thích
-//         ngược với các bản build app cũ chưa có màn chọn phòng).
-//       + Có từ 2 hợp đồng active trở lên -> KHÔNG được tự đoán, trả lỗi kèm
-//         danh sách phòng để client hiển thị màn chọn phòng.
+//   - Nếu không truyền -> mặc định dùng đúng PHÒNG ĐANG CHỌN ở Dashboard
+//     (Tenant.room, xem roomSelectionService) — để việc chụp công tơ luôn
+//     khớp với phòng tenant đang xem trên Dashboard, kể cả khi họ đang thuê
+//     nhiều phòng cùng lúc. Nếu Dashboard chưa từng chọn phòng nào (tenant
+//     mới, dữ liệu cũ...) mà có từ 2 hợp đồng active trở lên, mới trả lỗi kèm
+//     danh sách phòng để client hiển thị màn chọn phòng.
 const resolveActiveContract = async (tenantId, contractId) => {
   if (contractId) {
     const contract = await Contract.findOne({
@@ -131,38 +133,37 @@ const resolveActiveContract = async (tenantId, contractId) => {
     return contract;
   }
 
-  const activeContracts = await Contract.find({
-    tenant: tenantId,
-    status: "active",
-  }).populate("room", "roomNumber");
+  const { contract: selectedContract, rooms } =
+    await resolveSelectedContract(tenantId);
 
-  if (activeContracts.length === 0) {
+  if (selectedContract) return selectedContract;
+
+  if (rooms.length === 0) {
     const err = new Error("Bạn chưa có phòng đang thuê");
     err.statusCode = 404;
     throw err;
   }
 
-  if (activeContracts.length > 1) {
-    const err = new Error(
-      "Bạn đang thuê nhiều phòng — vui lòng chọn phòng muốn ghi chỉ số",
-    );
-    err.statusCode = 400;
-    err.needsContractSelection = true;
-    err.contracts = activeContracts.map((c) => ({
-      contractId: c._id,
-      roomId: c.room?._id,
-      roomNumber: c.room?.roomNumber || c.roomNumber,
-    }));
-    throw err;
-  }
-
-  return activeContracts[0];
+  // Trường hợp hiếm: có nhiều hợp đồng active nhưng chưa xác định được phòng
+  // đang chọn (không nên xảy ra vì resolveSelectedContract tự chọn mặc định
+  // hợp đồng gần nhất) — vẫn giữ lại lỗi kèm danh sách phòng để an toàn.
+  const err = new Error(
+    "Bạn đang thuê nhiều phòng — vui lòng chọn phòng muốn ghi chỉ số",
+  );
+  err.statusCode = 400;
+  err.needsContractSelection = true;
+  err.contracts = rooms.map((r) => ({
+    contractId: r.contractId,
+    roomId: r.roomId,
+    roomNumber: r.roomNumber,
+  }));
+  throw err;
 };
 
 // Trả response lỗi thống nhất cho resolveActiveContract, kèm danh sách phòng
 // để client hiển thị màn chọn phòng nếu cần.
 const sendContractResolveError = (res, err) => {
-  return error(
+  return sendError(
     res,
     err.message,
     err.statusCode || 400,

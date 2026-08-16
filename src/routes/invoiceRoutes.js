@@ -5,6 +5,7 @@ const { protect } = require("../middlewares/auth");
 const {
   getInvoices,
   getInvoiceById,
+  selectInvoiceRoom,
 } = require("../controllers/invoiceController");
 
 /**
@@ -68,5 +69,29 @@ router.get("/", protect, getInvoices);
  *         description: Thông tin hóa đơn
  */
 router.get("/:id", protect, getInvoiceById);
+
+/**
+ * @swagger
+ * /invoices/select-room:
+ *   patch:
+ *     summary: Chuyển phòng đang chọn ngay tại màn hóa đơn (hợp đồng phải còn hiệu lực)
+ *     tags: [Invoices]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [contractId]
+ *             properties:
+ *               contractId:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Danh sách hóa đơn theo phòng vừa chuyển
+ *       404:
+ *         description: Hợp đồng không tồn tại hoặc không còn hiệu lực
+ */
+router.patch("/select-room", protect, selectInvoiceRoom);
 
 module.exports = router;

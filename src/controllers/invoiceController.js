@@ -1,27 +1,57 @@
 //src/controllers/invoiceController.js
 const Invoice = require("../models/Invoice");
+const {
+  resolveSelectedContract,
+  listSelectableRooms,
+  selectRoom,
+} = require("../services/roomSelectionService");
 const { success, error: sendError } = require("../utils/response");
 
 // GET /invoices
 // Hỗ trợ filter theo hợp đồng (contract) để tách riêng hóa đơn của từng
 // hợp đồng khi tenant có nhiều hợp đồng cùng lúc, và theo type (rent/deposit).
+//
+// Mặc định (không truyền "contract" và không truyền "all=true"): chỉ trả hóa
+// đơn của phòng đang được CHỌN (đồng bộ với Dashboard/chụp công tơ) — đúng
+// yêu cầu "phần hiển thị bên invoice sẽ hiển thị phòng đang chọn".
+// - Truyền "contract=<id>": xem hóa đơn của đúng hợp đồng đó.
+// - Truyền "all=true": xem hóa đơn của TẤT CẢ phòng tenant từng thuê.
 const getInvoices = async (req, res) => {
   try {
-    const { status, year, month, contract, type } = req.query;
+    const { status, year, month, contract, type, all } = req.query;
     const filter = { tenant: req.user._id };
 
     if (status) filter.status = status;
     if (year) filter.year = parseInt(year);
     if (month) filter.month = parseInt(month);
-    if (contract) filter.contract = contract;
     if (type) filter.type = type;
+
+    let selectedContract = null;
+    if (contract) {
+      filter.contract = contract;
+    } else if (all !== "true") {
+      const resolved = await resolveSelectedContract(req.user._id);
+      selectedContract = resolved.contract;
+      if (selectedContract) filter.contract = selectedContract._id;
+    }
 
     const invoices = await Invoice.find(filter)
       .populate("room", "roomNumber")
       .populate("contract", "contractNumber roomNumber status")
       .sort({ year: -1, month: -1 });
 
-    return success(res, invoices, "Lấy danh sách hóa đơn thành công");
+    const rooms = await listSelectableRooms(req.user._id);
+
+    return success(
+      res,
+      {
+        invoices,
+        selectedContractId: contract || selectedContract?._id || null,
+        rooms,
+        hasMultipleRooms: rooms.length > 1,
+      },
+      "Lấy danh sách hóa đơn thành công",
+    );
   } catch (err) {
     return sendError(res, err.message);
   }
@@ -52,4 +82,19 @@ const getInvoiceById = async (req, res) => {
   }
 };
 
-module.exports = { getInvoices, getInvoiceById };
+// PATCH /invoices/select-room
+// Cho phép chuyển "phòng đang chọn" ngay tại màn hóa đơn (dùng chung phòng
+// đang chọn với Dashboard/chụp công tơ). Hợp đồng của phòng muốn chuyển tới
+// bắt buộc phải còn hiệu lực (status "active").
+const selectInvoiceRoom = async (req, res) => {
+  try {
+    const { contractId } = req.body;
+    await selectRoom(req.user._id, contractId);
+    return getInvoices(req, res);
+  } catch (err) {
+    if (err.statusCode) return sendError(res, err.message, err.statusCode);
+    return sendError(res, err.message);
+  }
+};
+
+module.exports = { getInvoices, getInvoiceById, selectInvoiceRoom };
