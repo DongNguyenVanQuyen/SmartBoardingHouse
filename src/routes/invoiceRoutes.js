@@ -5,6 +5,7 @@ const { protect } = require("../middlewares/auth");
 const {
   getInvoices,
   getInvoiceById,
+  getInvoiceRooms,
   selectInvoiceRoom,
 } = require("../controllers/invoiceController");
 
@@ -54,21 +55,17 @@ router.get("/", protect, getInvoices);
 
 /**
  * @swagger
- * /invoices/{id}:
+ * /invoices/rooms:
  *   get:
- *     summary: Chi tiết hóa đơn
+ *     summary: Danh sách phòng (chỉ hợp đồng còn hiệu lực) để lọc/chuyển phòng ở màn hóa đơn
  *     tags: [Invoices]
- *     parameters:
- *       - in: path
- *         name: id
- *         required: true
- *         schema:
- *           type: string
  *     responses:
  *       200:
- *         description: Thông tin hóa đơn
+ *         description: Danh sách phòng
  */
-router.get("/:id", protect, getInvoiceById);
+// ⚠️ Phải khai báo TRƯỚC "/:id" — nếu không "/rooms" sẽ bị Express hiểu nhầm
+// thành param :id = "rooms".
+router.get("/rooms", protect, getInvoiceRooms);
 
 /**
  * @swagger
@@ -93,5 +90,23 @@ router.get("/:id", protect, getInvoiceById);
  *         description: Hợp đồng không tồn tại hoặc không còn hiệu lực
  */
 router.patch("/select-room", protect, selectInvoiceRoom);
+
+/**
+ * @swagger
+ * /invoices/{id}:
+ *   get:
+ *     summary: Chi tiết hóa đơn
+ *     tags: [Invoices]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Thông tin hóa đơn
+ */
+router.get("/:id", protect, getInvoiceById);
 
 module.exports = router;
