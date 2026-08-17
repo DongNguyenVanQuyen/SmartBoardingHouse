@@ -4,8 +4,10 @@ const router = express.Router();
 const {
   renderPaymentPage,
   confirmPaymentByToken,
-  uploadChatImage
 } = require("../controllers/paymentController");
+const {
+  uploadChatImage
+} = require("../configs/cloudinary")
 
 /**
  * @swagger
