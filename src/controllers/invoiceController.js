@@ -14,9 +14,9 @@ const getInvoices = async (req, res) => {
     if (month) filter.month = parseInt(month);
     if (type) filter.type = type;
 
-    // 🟢 SỬA LỖI "TẤT CẢ PHÒNG": Nhận diện keyword "all"
+    // 🟢 ĐÃ SỬA: Lọc chính xác giá trị "all"
     if (contract && contract !== "all") {
-      filter.contract = contract; // Lọc theo đúng 1 hợp đồng
+      filter.contract = contract;
     } else if (contract === "all" || all === "true") {
       // Bỏ qua lọc contract -> Lấy toàn bộ hóa đơn của tất cả phòng (kể cả cũ)
     } else {
@@ -39,26 +39,29 @@ const getInvoices = async (req, res) => {
 // GET /invoices/rooms
 const getInvoiceRooms = async (req, res) => {
   try {
-    // 🟢 SỬA LỖI HỢP ĐỒNG CŨ: Lấy TẤT CẢ hợp đồng của user, bất kể status
+    // Lấy TẤT CẢ hợp đồng của user, bất kể status để user có thể xem lại HD cũ
     const contracts = await Contract.find({ tenant: req.user._id })
       .populate("room", "roomNumber")
       .sort({ status: 1, createdAt: -1 }); // Ưu tiên hợp đồng active lên trước
 
-    // Map lại danh sách phòng để ném vào Spinner cho App
     const rooms = contracts.map((c) => {
-      // Nếu hợp đồng đã kết thúc/hủy, thêm đuôi để user phân biệt
+      // Đánh dấu để người dùng biết HD nào đã kết thúc
       const suffix = c.status !== "active" ? " (Đã kết thúc)" : "";
+      
+      const rName = c.room?.roomNumber || "N/A";
+      const cName = c.contractNumber || "HD";
       
       return {
         contractId: c._id,
         contractNumber: c.contractNumber,
         roomId: c.room?._id,
-        roomNumber: (c.room?.roomNumber || "N/A") + suffix,
-        isSelected: false // App tự handle logic này
+        // 🟢 ĐÃ SỬA: Gộp Tên Phòng - Tên Hợp Đồng
+        roomNumber: `${rName} - ${cName}${suffix}`,
+        isSelected: false 
       };
     });
 
-    // 🟢 CHÈN OPTION "TẤT CẢ PHÒNG" LÊN ĐẦU DANH SÁCH
+    // Chèn lựa chọn "Tất cả phòng" lên đầu danh sách
     rooms.unshift({
       contractId: "all",
       contractNumber: "",
@@ -102,10 +105,16 @@ const getInvoiceById = async (req, res) => {
 const selectInvoiceRoom = async (req, res) => {
   try {
     const { contractId } = req.body;
-    // Chặn việc chọn "Tất cả phòng" làm phòng mặc định
+    
+    // Nếu không phải chọn "all" thì lưu vào phòng mặc định
     if (contractId !== "all") {
-        await selectRoom(req.user._id, contractId);
+      await selectRoom(req.user._id, contractId);
     }
+    
+    // 🟢 ĐÃ SỬA CỐT LÕI TẠI ĐÂY: Gán contractId từ body sang query để hàm getInvoices hiểu được
+    req.query = req.query || {};
+    req.query.contract = contractId;
+
     return getInvoices(req, res);
   } catch (err) {
     if (err.statusCode) return sendError(res, err.message, err.statusCode);
