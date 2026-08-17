@@ -6,6 +6,7 @@ const {
   confirmPaymentByToken,
 } = require("../controllers/paymentController");
 const { uploadReceipt } = require("../configs/cloudinary");
+
 /**
  * @swagger
  * tags:
@@ -42,7 +43,7 @@ router.get("/:token", renderPaymentPage);
  * @swagger
  * /pay/{token}/confirm:
  *   post:
- *     summary: Xác nhận thanh toán (gọi từ trang HTML khi người dùng bấm nút)
+ *     summary: Xác nhận thanh toán (có thể kèm ảnh minh chứng giao dịch)
  *     tags: [PublicPayment]
  *     parameters:
  *       - in: path
@@ -52,13 +53,12 @@ router.get("/:token", renderPaymentPage);
  *           type: string
  *     responses:
  *       200:
- *         description: Xác nhận thanh toán thành công, đã cập nhật hóa đơn
+ *         description: Xác nhận thanh toán thành công, đã cập nhật hóa đơn và lưu ảnh
  *       400:
  *         description: Phiên thanh toán đã được xác nhận trước đó
  *       404:
  *         description: Không tìm thấy phiên thanh toán hoặc hóa đơn
  */
-router.post("/:token/confirm", confirmPaymentByToken);
 
 router.post(
   "/:token/confirm",
