@@ -11,22 +11,6 @@ const getProfile = async (req, res) => {
   }
 };
 
-// PUT /profile
-const updateProfile = async (req, res) => {
-  try {
-    const { fullName, phone, idCard, dateOfBirth, address } = req.body;
-
-    const tenant = await Tenant.findByIdAndUpdate(
-      req.user._id,
-      { fullName, phone, idCard, dateOfBirth, address },
-      { new: true, runValidators: true },
-    );
-
-    return success(res, tenant, "Cập nhật thông tin thành công");
-  } catch (err) {
-    return sendError(res, err.message);
-  }
-};
 
 // POST /profile/avatar
 const updateAvatar = async (req, res) => {
