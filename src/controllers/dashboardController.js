@@ -38,7 +38,6 @@ const getDashboard = async (req, res) => {
     }
 
     // Xác định hợp đồng đang được xem (Mặc định là cái đầu tiên nếu FE không gửi ID phòng)
-    // Tương lai: Bạn có thể lưu req.user.selectedContractId vào DB để nhớ phòng user đang xem
     const selectedContract = contracts[0]; 
 
     // Tạo mảng rooms cho Android vẽ UI chọn phòng
@@ -70,7 +69,8 @@ const getDashboard = async (req, res) => {
     ] = await Promise.all([
       Invoice.findOne({
         tenant: req.user._id,
-        room: selectedContract.room._id, // Chỉ lấy hóa đơn của phòng ĐANG CHỌN
+        contract: selectedContract._id, // 🟢 BẮT BUỘC: Lọc theo đúng hợp đồng đang chọn
+        type: "rent",                   // 🟢 BẮT BUỘC: Chỉ lấy hóa đơn tiền phòng (Bỏ qua hóa đơn cọc)
         month: currentMonth,
         year: currentYear,
       }).populate({
@@ -136,6 +136,7 @@ const getDashboard = async (req, res) => {
     return sendError(res, err.message);
   }
 };
+
 // Hàm xử lý khi user bấm "Chọn phòng" trên App
 const selectDashboardRoom = async (req, res) => {
   try {
@@ -192,7 +193,8 @@ const selectDashboardRoom = async (req, res) => {
     ] = await Promise.all([
       Invoice.findOne({
         tenant: req.user._id,
-        room: selectedContract.room._id, // Lấy hóa đơn của phòng mới chọn
+        contract: selectedContract._id, 
+        type: "rent",                 
         month: currentMonth,
         year: currentYear,
       }).populate({
