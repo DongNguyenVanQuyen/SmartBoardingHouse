@@ -228,7 +228,7 @@ const renderHtml = (title, message) => `
   </body></html>
 `;
 
-// POST /pay/:token/confirm — xử lý thanh toán thật (public, không cần JWT)
+// POST /pay/:token/confirm — xử lý thanh toán thật (khách hàng bấm xác nhận)
 const confirmPaymentByToken = async (req, res) => {
   try {
     const payment = await Payment.findOne({ payToken: req.params.token });
@@ -248,34 +248,36 @@ const confirmPaymentByToken = async (req, res) => {
       );
     }
 
+    // 1. Cập nhật thông tin Payment thành công
     payment.status = "success";
     payment.paidAt = new Date();
     payment.transactionId = `TXN_${Date.now()}`;
 
-    // 🟢 BỔ SUNG: Nhận ảnh đính kèm từ App và lưu vào DB
     if (req.file && req.file.path) {
       payment.receiptImage = req.file.path;
-      invoice.receiptImage = req.file.path;
+      invoice.receiptImage = req.file.path; // Lưu ảnh minh chứng
     }
 
     await payment.save();
 
-    invoice.paidAmount += payment.amount;
-    invoice.status =
-      invoice.paidAmount >= invoice.totalAmount ? "paid" : "partial";
+    // 2. 🟢 THAY ĐỔI TẠI ĐÂY: Khi khách xác nhận xong, đưa hóa đơn về trạng thái "pending" (Chờ duyệt)
+    // Thay vì cộng tiền ngay vào paidAmount và đổi thành paid, ta giữ nguyên hoặc để admin duyệt xong mới tính.
+    // Hoặc nếu bạn vẫn muốn cộng paidAmount nhưng ép status thành "pending":
+    invoice.status = "pending"; 
     await invoice.save();
 
+    // 3. Gửi thông báo cho Tenant biết đã gửi yêu cầu chờ admin duyệt
     await createAndPushNotification({
       tenant: payment.tenant,
-      title: "Thanh toán thành công",
-      body: `Đã ghi nhận thanh toán ${payment.amount.toLocaleString("vi-VN")}đ cho hóa đơn tháng ${invoice.month}/${invoice.year}.`,
+      title: "Đã gửi minh chứng thanh toán",
+      body: `Hóa đơn tháng ${invoice.month}/${invoice.year} đang chờ quản lý xác nhận.`,
       type: "invoice",
       refId: invoice._id,
       refModel: "Invoice",
       meta: { paymentId: payment._id },
     });
 
-    return success(res, { payment, invoice }, "Thanh toán thành công");
+    return success(res, { payment, invoice }, "Đã gửi xác nhận thanh toán, vui lòng chờ Admin duyệt");
   } catch (err) {
     return sendError(res, err.message);
   }

@@ -56,7 +56,7 @@ const InvoiceSchema = new mongoose.Schema(
       type: String,
       // "cancelled": hóa đơn (thường là hóa đơn cọc) bị hủy vì hợp đồng đã
       // hết hạn/bị hủy trước khi tenant kịp thanh toán — không thể thanh toán nữa.
-      enum: ["unpaid", "partial", "paid", "overdue", "cancelled"],
+      enum: ["unpaid", "partial", "pending", "paid", "overdue", "cancelled"],
       default: "unpaid",
     },
     receiptImage: { type: String, default: null },
