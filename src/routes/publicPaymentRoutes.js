@@ -5,10 +5,7 @@ const {
   renderPaymentPage,
   confirmPaymentByToken,
 } = require("../controllers/paymentController");
-const {
-  uploadChatImage
-} = require("../configs/cloudinary")
-
+const { uploadReceipt } = require("../configs/cloudinary");
 /**
  * @swagger
  * tags:
@@ -63,5 +60,10 @@ router.get("/:token", renderPaymentPage);
  */
 router.post("/:token/confirm", confirmPaymentByToken);
 
-router.post("/:token/confirm", uploadChatImage.single("receiptImage"), confirmPaymentByToken);
+router.post(
+  "/:token/confirm",
+  uploadReceipt.single("receiptImage"),
+  confirmPaymentByToken
+);
+
 module.exports = router;

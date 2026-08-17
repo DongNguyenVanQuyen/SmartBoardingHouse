@@ -108,6 +108,23 @@ const uploadIdCard = multer({
   limits: { fileSize: 5 * 1024 * 1024 }, // 5MB
 });
 
+// Thêm đoạn này vào file src/configs/cloudinary.js
+const receiptStorage = new CloudinaryStorage({
+  cloudinary,
+  params: {
+    folder: "smartboarding/receipts", // Thư mục riêng biệt trên Cloudinary
+    allowed_formats: ["jpg", "jpeg", "png", "webp"],
+    transformation: [{ width: 1280, crop: "limit" }],
+    public_id: (req) => `receipt_${Date.now()}`,
+  },
+});
+
+const uploadReceipt = multer({
+  storage: receiptStorage,
+  limits: { fileSize: 5 * 1024 * 1024 }, // Giới hạn 5MB
+});
+
+// Nhớ export thêm uploadReceipt ở cuối file
 module.exports = {
   cloudinary,
   uploadAvatar,
@@ -116,4 +133,5 @@ module.exports = {
   uploadMeterReading,
   uploadChatImage,
   uploadIdCard,
+  uploadReceipt, 
 };
