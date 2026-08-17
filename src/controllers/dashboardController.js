@@ -130,5 +130,123 @@ const getDashboard = async (req, res) => {
     return sendError(res, err.message);
   }
 };
+// Hàm xử lý khi user bấm "Chọn phòng" trên App
+const selectDashboardRoom = async (req, res) => {
+  try {
+    const { contractId } = req.body;
+    if (!contractId) return sendError(res, "Thiếu ID hợp đồng");
 
-module.exports = { getDashboard };
+    const now = new Date();
+    const currentMonth = now.getMonth() + 1;
+    const currentYear = now.getFullYear();
+
+    const contracts = await Contract.find({
+      tenant: req.user._id,
+      status: "active",
+    })
+      .populate({
+        path: "room",
+        populate: { path: "floor", select: "name floorNumber" },
+      })
+      .sort({ createdAt: -1 });
+
+    if (!contracts || contracts.length === 0) {
+      return sendError(res, "Không tìm thấy hợp đồng nào");
+    }
+
+    // Tìm hợp đồng mà user vừa click chọn, nếu không thấy thì lấy cái đầu tiên
+    const selectedContract = contracts.find(c => c._id.toString() === contractId) || contracts[0];
+
+    // Cập nhật lại mảng roomsOption, set isSelected = true cho phòng vừa chọn
+    const roomsOption = contracts.map((c) => ({
+      roomId: c.room?._id,
+      roomNumber: c.room?.name || c.room?.roomNumber,
+      contractId: c._id,
+      contractNumber: c.contractNumber || "",
+      price: c.room?.price || 0, // Đã map đúng chữ price
+      isSelected: c._id.toString() === selectedContract._id.toString()
+    }));
+
+    // Đảm bảo hóa đơn của phòng mới chọn đã được sinh ra
+    if (selectedContract?.room?._id) {
+      try {
+        await generateInvoice(req.user._id, selectedContract.room._id, selectedContract._id, currentMonth, currentYear);
+      } catch (err) {
+        console.error("[INVOICE ERROR]", err);
+      }
+    }
+
+    // Query lại toàn bộ dữ liệu nhưng focus vào phòng vừa chọn
+    const [
+      currentInvoice,
+      unpaidCount,
+      totalDebtAgg,
+      unreadNotifications,
+      activeRequests,
+    ] = await Promise.all([
+      Invoice.findOne({
+        tenant: req.user._id,
+        room: selectedContract.room._id, // Lấy hóa đơn của phòng mới chọn
+        month: currentMonth,
+        year: currentYear,
+      }).populate({
+        path: "room",
+        populate: { path: "floor", select: "name floorNumber" },
+      }).populate("contract"), // Giữ nguyên Object contract để FE không lỗi
+
+      Invoice.countDocuments({
+        tenant: req.user._id,
+        status: { $in: ["unpaid", "partial", "overdue"] },
+      }),
+
+      Invoice.aggregate([
+        { $match: { tenant: req.user._id, status: { $in: ["unpaid", "partial", "overdue"] } } },
+        { $group: { _id: null, totalDebt: { $sum: { $subtract: ["$totalAmount", "$paidAmount"] } } } },
+      ]),
+
+      Notification.countDocuments({ tenant: req.user._id, isRead: false }),
+
+      MaintenanceRequest.countDocuments({
+        tenant: req.user._id,
+        status: { $in: ["pending", "processing"] },
+      }),
+    ]);
+
+    const rentAmount = selectedContract?.room?.price || 0;
+    let electricAmount = 0;
+    let waterAmount = 0;
+
+    if (currentInvoice) {
+      if (currentInvoice.electricUsage > 0 || currentInvoice.electricPrice > 0) {
+        electricAmount = currentInvoice.electricUsage * currentInvoice.electricPrice;
+      }
+      if (currentInvoice.waterUsage > 0 || currentInvoice.waterPrice > 0) {
+        waterAmount = currentInvoice.waterUsage * currentInvoice.waterPrice;
+      }
+      if (electricAmount === 0 && waterAmount === 0 && currentInvoice.items?.length) {
+        currentInvoice.items.forEach((item) => {
+          const name = item.name.toLowerCase();
+          if (name.includes("điện") || name.includes("dien")) electricAmount += item.total;
+          if (name.includes("nước") || name.includes("nuoc")) waterAmount += item.total;
+        });
+      }
+    }
+
+    return success(res, {
+      tenant: { id: req.user._id, fullName: req.user.fullName, email: req.user.email, phone: req.user.phone },
+      room: selectedContract.room,
+      rooms: roomsOption,
+      hasMultipleRooms: contracts.length > 1,
+      invoice: currentInvoice,
+      stats: { rentAmount, electricAmount, waterAmount, unpaidCount, totalDebt: totalDebtAgg[0]?.totalDebt || 0 },
+      unreadNotifications,
+      activeMaintenanceRequests: activeRequests,
+      contract: { startDate: selectedContract.startDate, endDate: selectedContract.endDate },
+    }, "Chuyển phòng thành công");
+
+  } catch (err) {
+    return sendError(res, err.message);
+  }
+};
+
+module.exports = { getDashboard, selectDashboardRoom };
