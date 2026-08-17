@@ -2,25 +2,39 @@ const MaintenanceRequest = require("../models/MaintenanceRequest");
 const Contract = require("../models/Contract");
 const Room = require("../models/Room");
 const { createAndPushNotification } = require("../services/notificationService");
+const { resolveSelectedContract } = require("../services/roomSelectionService"); // Thêm service này
 const { success, error: sendError } = require("../utils/response");
 const { normalizeMaintenanceRequest } = require("../utils/maintenanceEnumMap");
 
 // POST /maintenance-requests
 const createRequest = async (req, res) => {
   try {
-    const { title, description, priority, category } = req.body;
+    // Thêm trường contract vào req.body (từ form-data)
+    const { title, description, priority, category, contract: contractId } = req.body;
 
     if (!title || !description) {
       return sendError(res, "Vui lòng nhập tiêu đề và mô tả", 400);
     }
 
-    const contract = await Contract.findOne({
-      tenant: req.user._id,
-      status: "active",
-    });
-
-    if (!contract) {
-      return sendError(res, "Bạn chưa có phòng đang thuê", 404);
+    // 🟢 LOGIC TÌM HỢP ĐỒNG (PHÒNG)
+    let contract;
+    if (contractId) {
+      // Nếu App gửi ID phòng lên -> Lấy đúng phòng đó
+      contract = await Contract.findOne({
+        _id: contractId,
+        tenant: req.user._id,
+        status: "active",
+      });
+      if (!contract) {
+        return sendError(res, "Phòng không hợp lệ hoặc đã hết hạn thuê", 404);
+      }
+    } else {
+      // Nếu App không gửi -> Lấy mặc định phòng đang chọn ở Dashboard
+      const resolved = await resolveSelectedContract(req.user._id);
+      contract = resolved.contract;
+      if (!contract) {
+        return sendError(res, "Bạn chưa có phòng đang thuê", 404);
+      }
     }
 
     const images = req.files ? req.files.map((f) => f.path) : [];
@@ -34,7 +48,7 @@ const createRequest = async (req, res) => {
     const created = await MaintenanceRequest.create({
       requestNumber,
       tenant: req.user._id,
-      room: contract.room,
+      room: contract.room, // 🟢 Gán đúng phòng đã chọn
       roomNumber: room?.roomNumber,
       tenantName: req.user.fullName,
       title,
@@ -47,7 +61,7 @@ const createRequest = async (req, res) => {
     await createAndPushNotification({
       tenant: req.user._id,
       title: "Yêu cầu sửa chữa đã được gửi",
-      body: `Yêu cầu "${title}" đang chờ xử lý`,
+      body: `Yêu cầu "${title}" của phòng ${room?.roomNumber} đang chờ xử lý`,
       type: "maintenance",
       refId: created._id,
       refModel: "MaintenanceRequest",
