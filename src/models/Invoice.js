@@ -12,7 +12,6 @@ const InvoiceSchema = new mongoose.Schema(
     room: { type: mongoose.Schema.Types.ObjectId, ref: "Room", required: true },
     contract: { type: mongoose.Schema.Types.ObjectId, ref: "Contract" },
     // Cache hiển thị cho Admin
-    tenantName: { type: String },
     roomNumber: { type: String },
     month: { type: Number, required: true }, // 1-12
     year: { type: Number, required: true },

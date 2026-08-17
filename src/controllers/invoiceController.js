@@ -14,13 +14,47 @@ const getInvoices = async (req, res) => {
     if (month) filter.month = parseInt(month);
     if (type) filter.type = type;
 
-    // 🟢 ĐÃ SỬA: Lọc chính xác giá trị "all"
+    // 🟢 XỬ LÝ LỌC HÓA ĐƠN THEO KHOẢNG THỜI GIAN HỢP ĐỒNG (HỖ TRỢ CẢ HỢP ĐỒNG ĐÃ HẾT HẠN)
     if (contract && contract !== "all") {
-      filter.contract = contract;
+      // Tìm thông tin hợp đồng được chọn để lấy mốc thời gian startDate và endDate
+      const selectedContract = await Contract.findById(contract);
+      if (selectedContract) {
+        filter.contract = contract;
+
+        // Nếu hợp đồng có ngày bắt đầu và kết thúc cụ thể, ta có thể lọc hóa đơn theo khoảng thời gian đó
+        // (Dựa vào trường month và year của hóa đơn so với startDate/endDate của hợp đồng)
+        if (selectedContract.startDate && selectedContract.endDate) {
+          const startYear = new Date(selectedContract.startDate).getFullYear();
+          const startMonth = new Date(selectedContract.startDate).getMonth() + 1;
+          const endYear = new Date(selectedContract.endDate).getFullYear();
+          const endMonth = new Date(selectedContract.endDate).getMonth() + 1;
+
+          // Tạo điều kiện lọc tháng/năm nằm trong khoảng hợp đồng hiệu lực
+          // (Chỉ áp dụng cho hóa đơn rent, hóa đơn deposit có thể giữ nguyên theo contract ID)
+          if (!type || type === "rent") {
+            filter.$or = [
+              {
+                year: { $gt: startYear, $lt: endYear },
+              },
+              {
+                year: startYear,
+                month: { $gte: startMonth },
+                ...(startYear === endYear ? { month: { $gte: startMonth, $lte: endMonth } } : {}),
+              },
+              ...(startYear !== endYear ? [{
+                year: endYear,
+                month: { $lte: endMonth },
+              }] : [])
+            ];
+          }
+        }
+      } else {
+        filter.contract = contract;
+      }
     } else if (contract === "all" || all === "true") {
-      // Bỏ qua lọc contract -> Lấy toàn bộ hóa đơn của tất cả phòng (kể cả cũ)
+      // Lấy toàn bộ hóa đơn của tất cả phòng
     } else {
-      // Mặc định khi mới vào màn hình: lấy hóa đơn phòng đang chọn
+      // Mặc định: lấy hóa đơn phòng đang chọn
       const { contract: selected } = await resolveSelectedContract(req.user._id);
       if (selected) filter.contract = selected._id;
     }
@@ -39,15 +73,12 @@ const getInvoices = async (req, res) => {
 // GET /invoices/rooms
 const getInvoiceRooms = async (req, res) => {
   try {
-    // Lấy TẤT CẢ hợp đồng của user, bất kể status để user có thể xem lại HD cũ
     const contracts = await Contract.find({ tenant: req.user._id })
       .populate("room", "roomNumber")
-      .sort({ status: 1, createdAt: -1 }); // Ưu tiên hợp đồng active lên trước
+      .sort({ status: 1, createdAt: -1 });
 
     const rooms = contracts.map((c) => {
-      // Đánh dấu để người dùng biết HD nào đã kết thúc
       const suffix = c.status !== "active" ? " (Đã kết thúc)" : "";
-      
       const rName = c.room?.roomNumber || "N/A";
       const cName = c.contractNumber || "HD";
       
@@ -55,13 +86,11 @@ const getInvoiceRooms = async (req, res) => {
         contractId: c._id,
         contractNumber: c.contractNumber,
         roomId: c.room?._id,
-        // 🟢 ĐÃ SỬA: Gộp Tên Phòng - Tên Hợp Đồng
         roomNumber: `${rName} - ${cName}${suffix}`,
         isSelected: false 
       };
     });
 
-    // Chèn lựa chọn "Tất cả phòng" lên đầu danh sách
     rooms.unshift({
       contractId: "all",
       contractNumber: "",
@@ -106,12 +135,10 @@ const selectInvoiceRoom = async (req, res) => {
   try {
     const { contractId } = req.body;
     
-    // Nếu không phải chọn "all" thì lưu vào phòng mặc định
     if (contractId !== "all") {
       await selectRoom(req.user._id, contractId);
     }
     
-    // 🟢 ĐÃ SỬA CỐT LÕI TẠI ĐÂY: Gán contractId từ body sang query để hàm getInvoices hiểu được
     req.query = req.query || {};
     req.query.contract = contractId;
 
