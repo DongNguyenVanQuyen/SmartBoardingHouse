@@ -77,7 +77,13 @@ const getDashboard = async (req, res) => {
         path: "room",
         populate: { path: "floor", select: "name floorNumber" },
       })
-      .populate("contract"),
+      .populate({
+        path: "contract",
+        populate: { 
+          path: "room",
+          populate: { path: "floor" } // Bọc luôn floor cho Android đỡ báo lỗi
+        } 
+      }),
 
       // Đếm nợ của TẤT CẢ các phòng (để user biết mình đang nợ tổng bao nhiêu)
       Invoice.countDocuments({
@@ -192,7 +198,13 @@ const selectDashboardRoom = async (req, res) => {
       }).populate({
         path: "room",
         populate: { path: "floor", select: "name floorNumber" },
-      }).populate("contract"), // Giữ nguyên Object contract để FE không lỗi
+      }).populate({
+        path: "contract",
+        populate: { 
+          path: "room",
+          populate: { path: "floor" } // Bọc luôn floor cho Android đỡ báo lỗi
+        } 
+      }), // Giữ nguyên Object contract để FE không lỗi
 
       Invoice.countDocuments({
         tenant: req.user._id,
