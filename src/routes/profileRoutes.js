@@ -1,12 +1,16 @@
-//src/routes/profileRoutes.js
+// src/routes/profileRoutes.js
 const express = require("express");
 const router = express.Router();
 const { protect } = require("../middlewares/auth");
-const { uploadAvatar } = require("../configs/cloudinary");
+
+// 🟢 SỬA: Đã thêm uploadIdCard vào đây
+const { uploadAvatar, uploadIdCard } = require("../configs/cloudinary");
+
 const {
   getProfile,
   updateProfile,
   updateAvatar,
+  uploadIdentityCard
 } = require("../controllers/profileController");
 
 /**
@@ -65,5 +69,38 @@ router.put("/", protect, updateProfile);
  *         description: Avatar cập nhật thành công
  */
 router.post("/avatar", protect, uploadAvatar.single("avatar"), updateAvatar);
+
+/**
+ * @swagger
+ * /profile/identity-card:
+ *   post:
+ *     summary: Cập nhật ảnh CMND/CCCD
+ *     tags: [Profile]
+ *     requestBody:
+ *       content:
+ *         multipart/form-data:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               frontImage:
+ *                 type: string
+ *                 format: binary
+ *               backImage:
+ *                 type: string
+ *                 format: binary
+ *     responses:
+ *       200:
+ *         description: Ảnh CMND/CCCD cập nhật thành công
+ */
+// 🟢 THÊM MỚI: Route xử lý upload ảnh CMND 2 mặt
+router.post(
+  "/identity-card",
+  protect,
+  uploadIdCard.fields([
+    { name: "frontImage", maxCount: 1 },
+    { name: "backImage", maxCount: 1 }
+  ]),
+  uploadIdentityCard
+);
 
 module.exports = router;
