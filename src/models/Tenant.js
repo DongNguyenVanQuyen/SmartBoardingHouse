@@ -20,6 +20,8 @@ const TenantSchema = new mongoose.Schema(
     password: { type: String, required: true, minlength: 6 },
     avatar: { type: String, default: null },
     idCard: { type: String, trim: true },
+    frontImage: { type: String, default: null },
+    backImage: { type: String, default: null },
     dateOfBirth: { type: Date },
     address: { type: String, trim: true },
     room: {
@@ -34,6 +36,7 @@ const TenantSchema = new mongoose.Schema(
     isActive: { type: Boolean, default: true },
     resetOtp: { type: String, default: null, select: false },
     resetOtpExpiry: { type: Date, default: null, select: false },
+
   },
   { timestamps: true, versionKey: false },
 );

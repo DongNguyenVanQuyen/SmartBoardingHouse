@@ -92,6 +92,22 @@ const uploadChatImage = multer({
   limits: { fileSize: 8 * 1024 * 1024 },
 });
 
+// Ảnh CCCD
+const identityCardStorage = new CloudinaryStorage({
+  cloudinary,
+  params: {
+    folder: "tenant-app/identity-cards",
+    allowed_formats: ["jpg", "jpeg", "png", "webp"],
+    transformation: [{ width: 1000, crop: "limit" }], // Không cần crop vuông như avatar
+    public_id: (req) => `idcard_${req.user.id}_${Date.now()}`,
+  },
+});
+
+const uploadIdCard = multer({
+  storage: identityCardStorage,
+  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB
+});
+
 module.exports = {
   cloudinary,
   uploadAvatar,
@@ -99,4 +115,5 @@ module.exports = {
   uploadMaintenance,
   uploadMeterReading,
   uploadChatImage,
+  uploadIdCard,
 };
