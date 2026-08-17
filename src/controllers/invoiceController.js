@@ -14,47 +14,47 @@ const getInvoices = async (req, res) => {
     if (month) filter.month = parseInt(month);
     if (type) filter.type = type;
 
-    // 🟢 XỬ LÝ LỌC HÓA ĐƠN THEO KHOẢNG THỜI GIAN HỢP ĐỒNG (HỖ TRỢ CẢ HỢP ĐỒNG ĐÃ HẾT HẠN)
+    // 🟢 SỬA LỖI TẠI ĐÂY: Lấy hóa đơn chính xác trong khoảng thời gian của hợp đồng
     if (contract && contract !== "all") {
-      // Tìm thông tin hợp đồng được chọn để lấy mốc thời gian startDate và endDate
       const selectedContract = await Contract.findById(contract);
+      
       if (selectedContract) {
-        filter.contract = contract;
+        // Gắn điều kiện phải đúng phòng đó
+        filter.room = selectedContract.room;
 
-        // Nếu hợp đồng có ngày bắt đầu và kết thúc cụ thể, ta có thể lọc hóa đơn theo khoảng thời gian đó
-        // (Dựa vào trường month và year của hóa đơn so với startDate/endDate của hợp đồng)
-        if (selectedContract.startDate && selectedContract.endDate) {
-          const startYear = new Date(selectedContract.startDate).getFullYear();
-          const startMonth = new Date(selectedContract.startDate).getMonth() + 1;
-          const endYear = new Date(selectedContract.endDate).getFullYear();
-          const endMonth = new Date(selectedContract.endDate).getMonth() + 1;
+        if (selectedContract.startDate) {
+          // Lấy mốc thời gian bắt đầu và kết thúc của Hợp đồng
+          const startDate = new Date(selectedContract.startDate);
+          const endDate = selectedContract.endDate ? new Date(selectedContract.endDate) : new Date();
 
-          // Tạo điều kiện lọc tháng/năm nằm trong khoảng hợp đồng hiệu lực
-          // (Chỉ áp dụng cho hóa đơn rent, hóa đơn deposit có thể giữ nguyên theo contract ID)
-          if (!type || type === "rent") {
-            filter.$or = [
-              {
-                year: { $gt: startYear, $lt: endYear },
-              },
-              {
-                year: startYear,
-                month: { $gte: startMonth },
-                ...(startYear === endYear ? { month: { $gte: startMonth, $lte: endMonth } } : {}),
-              },
-              ...(startYear !== endYear ? [{
-                year: endYear,
-                month: { $lte: endMonth },
-              }] : [])
-            ];
-          }
+          const startYear = startDate.getFullYear();
+          const startMonth = startDate.getMonth() + 1;
+          const endYear = endDate.getFullYear();
+          const endMonth = endDate.getMonth() + 1;
+
+          // Lọc hóa đơn có tháng/năm nằm lọt trong mốc thời gian này
+          filter.$or = [
+            { year: { $gt: startYear, $lt: endYear } },
+            {
+              year: startYear,
+              month: { 
+                $gte: startMonth, 
+                ...(startYear === endYear ? { $lte: endMonth } : {}) 
+              }
+            },
+            ...(startYear !== endYear ? [{ year: endYear, month: { $lte: endMonth } }] : [])
+          ];
+        } else {
+          // Fallback nếu hợp đồng bị thiếu ngày tháng
+          filter.contract = contract;
         }
       } else {
         filter.contract = contract;
       }
     } else if (contract === "all" || all === "true") {
-      // Lấy toàn bộ hóa đơn của tất cả phòng
+      // Bỏ qua lọc contract -> Lấy toàn bộ
     } else {
-      // Mặc định: lấy hóa đơn phòng đang chọn
+      // Mặc định: lấy hóa đơn phòng đang được set active
       const { contract: selected } = await resolveSelectedContract(req.user._id);
       if (selected) filter.contract = selected._id;
     }
@@ -135,8 +135,13 @@ const selectInvoiceRoom = async (req, res) => {
   try {
     const { contractId } = req.body;
     
-    if (contractId !== "all") {
-      await selectRoom(req.user._id, contractId);
+    if (contractId && contractId !== "all") {
+      // 🟢 SỬA LỖI TẠI ĐÂY: Chỉ lưu làm phòng mặc định nếu hợp đồng còn hiệu lực (active). 
+      // Hợp đồng cũ chỉ dùng để lọc hóa đơn, không được set làm phòng hiện tại.
+      const contract = await Contract.findById(contractId);
+      if (contract && contract.status === "active") {
+        await selectRoom(req.user._id, contractId);
+      }
     }
     
     req.query = req.query || {};
