@@ -139,7 +139,7 @@ app.use((err, req, res, next) => {
 
 const PORT = process.env.PORT || 5000;
 server.listen(PORT, () => {
-  console.log(`\n🚀 Server running on port ${PORT}`);
-  console.log(`📚 Swagger docs: http://localhost:${PORT}/api-docs`);
+  console.log(`\nServer running on port ${PORT}`);
+  console.log(`Swagger docs: http://localhost:${PORT}/api-docs`);
   console.log(`Socket.IO ready\n`);
 });
