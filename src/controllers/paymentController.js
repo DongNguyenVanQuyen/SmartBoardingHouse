@@ -240,8 +240,6 @@ const confirmPaymentByToken = async (req, res) => {
     const invoice = await Invoice.findById(payment.invoice);
     if (!invoice) return sendError(res, "Không tìm thấy hóa đơn", 404);
 
-    // Phòng trường hợp hóa đơn bị hủy (hợp đồng kết thúc) SAU khi phiên
-    // thanh toán đã được tạo nhưng TRƯỚC khi tenant xác nhận thanh toán.
     if (invoice.status === "cancelled") {
       return sendError(
         res,
@@ -253,6 +251,13 @@ const confirmPaymentByToken = async (req, res) => {
     payment.status = "success";
     payment.paidAt = new Date();
     payment.transactionId = `TXN_${Date.now()}`;
+
+    // 🟢 BỔ SUNG: Nhận ảnh đính kèm từ App và lưu vào DB
+    if (req.file && req.file.path) {
+      payment.receiptImage = req.file.path;
+      invoice.receiptImage = req.file.path;
+    }
+
     await payment.save();
 
     invoice.paidAmount += payment.amount;

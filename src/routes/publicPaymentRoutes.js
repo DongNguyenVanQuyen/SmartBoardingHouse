@@ -4,6 +4,7 @@ const router = express.Router();
 const {
   renderPaymentPage,
   confirmPaymentByToken,
+  uploadChatImage
 } = require("../controllers/paymentController");
 
 /**
@@ -60,4 +61,5 @@ router.get("/:token", renderPaymentPage);
  */
 router.post("/:token/confirm", confirmPaymentByToken);
 
+router.post("/:token/confirm", uploadChatImage.single("receiptImage"), confirmPaymentByToken);
 module.exports = router;

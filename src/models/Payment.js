@@ -33,6 +33,7 @@ const PaymentSchema = new mongoose.Schema(
     qrData: { type: String },
     paidAt: { type: Date },
     note: { type: String },
+    receiptImage: { type: String, default: null },
   },
   { timestamps: true, versionKey: false },
 );

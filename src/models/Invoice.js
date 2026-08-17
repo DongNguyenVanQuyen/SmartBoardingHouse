@@ -59,6 +59,7 @@ const InvoiceSchema = new mongoose.Schema(
       enum: ["unpaid", "partial", "paid", "overdue", "cancelled"],
       default: "unpaid",
     },
+    receiptImage: { type: String, default: null },
     note: { type: String },
   },
   { timestamps: true, versionKey: false },
