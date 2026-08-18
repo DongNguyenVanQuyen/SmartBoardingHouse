@@ -3,6 +3,7 @@ const Contract = require("../models/Contract");
 const MaintenanceRequest = require("../models/MaintenanceRequest");
 const Notification = require("../models/Notification");
 const { generateInvoice } = require("../services/invoiceService");
+const { ensureDepositInvoice } = require("../services/depositInvoiceService");
 
 // Dùng chung service quản lý chọn phòng với màn Công tơ & Hóa đơn
 const { resolveSelectedContract, selectRoom } = require("../services/roomSelectionService");
@@ -20,7 +21,7 @@ const getDashboard = async (req, res) => {
     // Nếu không có hợp đồng nào đang active
     if (!resolvedContract) {
       return success(res, {
-        tenant: { id: req.user._id, fullName: req.user.fullName, email: req.user.email, phone: req.user.phone },
+        tenant: { id: req.user._id, fullName: req.user.fullName, email: req.user.email, phone: req.user.phone, avatar: req.user.avatar },
         room: null,
         rooms: [],
         hasMultipleRooms: false,
@@ -48,12 +49,19 @@ const getDashboard = async (req, res) => {
       isSelected: r.contractId.toString() === selectedContract._id.toString()
     }));
 
-    // 2. Generate Invoice cho đúng phòng đang chọn
-    if (selectedContract?.room?._id) {
-      try {
-        await generateInvoice(req.user._id, selectedContract.room._id, selectedContract._id, currentMonth, currentYear);
-      } catch (err) {
-        console.error("[INVOICE ERROR]", err);
+    // 2. Tự động sinh hóa đơn cho TẤT CẢ các phòng đang thuê có hợp đồng còn hiệu lực (active)
+    const activeContracts = await Contract.find({ tenant: req.user._id, status: "active" });
+    for (const c of activeContracts) {
+      if (c.room) {
+        try {
+          // Bảo đảm tạo hóa đơn tiền cọc cho hợp đồng này (Chỉ tạo 1 lần duy nhất)
+          await ensureDepositInvoice(c);
+
+          // Tạo hóa đơn tiền phòng/điện/nước hàng tháng
+          await generateInvoice(req.user._id, c.room, c._id, currentMonth, currentYear);
+        } catch (err) {
+          console.error(`[INVOICE GENERATION ERROR for room ${c.roomNumber || c.room}]`, err);
+        }
       }
     }
 
@@ -118,7 +126,7 @@ const getDashboard = async (req, res) => {
     }
 
     return success(res, {
-      tenant: { id: req.user._id, fullName: req.user.fullName, email: req.user.email, phone: req.user.phone },
+      tenant: { id: req.user._id, fullName: req.user.fullName, email: req.user.email, phone: req.user.phone, avatar: req.user.avatar },
       room: selectedContract.room,
       rooms: roomsOption,
       hasMultipleRooms: selectableRooms.length > 1,

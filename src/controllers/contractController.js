@@ -5,9 +5,18 @@ const { success, error: sendError } = require("../utils/response");
 // GET /contracts
 const getContracts = async (req, res) => {
   try {
-    const contracts = await Contract.find({ tenant: req.user._id })
+    let dbQuery = Contract.find({ tenant: req.user._id })
       .populate("room", "roomNumber price area")
       .sort({ createdAt: -1 });
+
+    if (req.query.page || req.query.limit) {
+      const page = parseInt(req.query.page) || 1;
+      const limit = parseInt(req.query.limit) || 10;
+      const skip = (page - 1) * limit;
+      dbQuery = dbQuery.skip(skip).limit(limit);
+    }
+
+    const contracts = await dbQuery;
 
     return success(res, contracts, "Lấy danh sách hợp đồng thành công");
   } catch (err) {

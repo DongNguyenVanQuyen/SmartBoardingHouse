@@ -98,7 +98,7 @@ const getRequests = async (req, res) => {
       filter.status = status;
     }
 
-    const requests = await MaintenanceRequest.find(filter)
+    let dbQuery = MaintenanceRequest.find(filter)
       .populate({
         path: "room",
         select: "roomNumber floor",
@@ -107,8 +107,16 @@ const getRequests = async (req, res) => {
           select: "name floorNumber",
         },
       })
-      .sort({ createdAt: -1 })
-      .lean();
+      .sort({ createdAt: -1 });
+
+    if (req.query.page || req.query.limit) {
+      const page = parseInt(req.query.page) || 1;
+      const limit = parseInt(req.query.limit) || 10;
+      const skip = (page - 1) * limit;
+      dbQuery = dbQuery.skip(skip).limit(limit);
+    }
+
+    const requests = await dbQuery.lean();
 
     const normalized = requests.map(normalizeMaintenanceRequest);
 

@@ -59,10 +59,19 @@ const getInvoices = async (req, res) => {
       if (selected) filter.contract = selected._id;
     }
 
-    const invoices = await Invoice.find(filter)
+    let dbQuery = Invoice.find(filter)
       .populate("room", "roomNumber")
       .populate("contract", "contractNumber roomNumber status")
       .sort({ year: -1, month: -1 });
+
+    if (req.query.page || req.query.limit) {
+      const page = parseInt(req.query.page) || 1;
+      const limit = parseInt(req.query.limit) || 10;
+      const skip = (page - 1) * limit;
+      dbQuery = dbQuery.skip(skip).limit(limit);
+    }
+
+    const invoices = await dbQuery;
 
     return success(res, invoices, "Lấy danh sách hóa đơn thành công");
   } catch (err) {
@@ -73,6 +82,8 @@ const getInvoices = async (req, res) => {
 // GET /invoices/rooms
 const getInvoiceRooms = async (req, res) => {
   try {
+    const { contract: selectedContract } = await resolveSelectedContract(req.user._id);
+
     const contracts = await Contract.find({ tenant: req.user._id })
       .populate("room", "roomNumber")
       .sort({ status: 1, createdAt: -1 });
@@ -82,12 +93,14 @@ const getInvoiceRooms = async (req, res) => {
       const rName = c.room?.roomNumber || "N/A";
       const cName = c.contractNumber || "HD";
       
+      const isSelected = selectedContract ? c._id.toString() === selectedContract._id.toString() : false;
+
       return {
         contractId: c._id,
         contractNumber: c.contractNumber,
         roomId: c.room?._id,
         roomNumber: `${rName} - ${cName}${suffix}`,
-        isSelected: false 
+        isSelected: isSelected
       };
     });
 
@@ -96,7 +109,7 @@ const getInvoiceRooms = async (req, res) => {
       contractNumber: "",
       roomId: "all",
       roomNumber: "Tất cả phòng",
-      isSelected: true
+      isSelected: false
     });
 
     return success(res, rooms, "Lấy danh sách phòng thành công");

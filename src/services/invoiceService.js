@@ -3,6 +3,7 @@ const Invoice = require("../models/Invoice");
 const MeterReading = require("../models/MeterReading");
 const Room = require("../models/Room");
 const Contract = require("../models/Contract");
+const ItemFee = require("../models/ItemFee");
 const { createAndPushNotification } = require("./notificationService");
 const { ensureDepositInvoice } = require("./depositInvoiceService");
 
@@ -57,7 +58,31 @@ const generateInvoice = async (tenantId, roomId, contractId, month, year) => {
   const waterAmount = wCost;
 
   const items = [];
-  const totalAmount = rentAmount + electricAmount + waterAmount;
+  
+  // Lấy danh sách các phí cấu hình từ bảng ItemFee
+  const activeFees = await ItemFee.find({ isActive: true });
+  
+  activeFees.forEach((fee) => {
+    if (fee.type === "mandatory") {
+      items.push({
+        name: fee.name,
+        quantity: 1,
+        unitPrice: fee.price,
+        total: fee.price
+      });
+    } else if (room.amenities && room.amenities.includes(fee.type)) {
+      // 🟢 Khớp động: Nếu loại phí trùng với bất kỳ tiện ích nào phòng đang có (ví dụ: "wifi", "parking", "gym", "ac",...)
+      items.push({
+        name: fee.name,
+        quantity: 1,
+        unitPrice: fee.price,
+        total: fee.price
+      });
+    }
+  });
+
+  const itemsTotal = items.reduce((sum, i) => sum + i.total, 0);
+  const totalAmount = rentAmount + electricAmount + waterAmount + itemsTotal;
 
   const detailFields = {
     roomPrice: rentAmount,
@@ -84,8 +109,18 @@ const generateInvoice = async (tenantId, roomId, contractId, month, year) => {
   });
 
   if (invoice) {
-    invoice.items = items;
-    Object.assign(invoice, detailFields);
+    const oldItems = invoice.items || [];
+    const itemsTotal = oldItems.reduce((sum, i) => sum + (i.total || 0), 0);
+    const newTotalAmount = rentAmount + electricAmount + waterAmount + (invoice.serviceFee || 0) + itemsTotal;
+
+    Object.assign(invoice, {
+      roomPrice: rentAmount,
+      electricUsage: eUsage,
+      electricPrice: ePrice,
+      waterUsage: wUsage,
+      waterPrice: wPrice,
+      totalAmount: newTotalAmount
+    });
     await invoice.save();
     return invoice;
   } else {
