@@ -59,6 +59,10 @@ const login = async (req, res) => {
     const isMatch = await tenant.comparePassword(password);
     if (!isMatch) return sendError(res, "Email hoặc mật khẩu không đúng", 401);
 
+    if (tenant.role === "Admin") {
+      return sendError(res, "Tài khoản Admin không được đăng nhập ứng dụng này", 403);
+    }
+
     if (!tenant.isActive) return sendError(res, "Tài khoản đã bị khóa", 403);
 
     // Ký role thật lấy từ DB, không mặc định "Tenant" nữa
