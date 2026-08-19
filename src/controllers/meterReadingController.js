@@ -468,17 +468,23 @@ const getMeterReadingHistory = async (req, res) => {
 // Dùng cho màn hình chọn phòng khi tenant có nhiều hợp đồng cùng lúc.
 const getMyMeterRooms = async (req, res) => {
   try {
+    const { contract: selectedContract } = await resolveSelectedContract(req.user._id);
+
     const activeContracts = await Contract.find({
       tenant: req.user._id,
       status: "active",
     }).populate("room", "roomNumber floor");
 
-    const rooms = activeContracts.map((c) => ({
-      contractId: c._id,
-      contractNumber: c.contractNumber,
-      roomId: c.room?._id,
-      roomNumber: c.room?.roomNumber || c.roomNumber,
-    }));
+    const rooms = activeContracts.map((c) => {
+      const isSelected = selectedContract ? c._id.toString() === selectedContract._id.toString() : false;
+      return {
+        contractId: c._id,
+        contractNumber: c.contractNumber,
+        roomId: c.room?._id,
+        roomNumber: c.room?.roomNumber || c.roomNumber,
+        isSelected: isSelected
+      };
+    });
 
     return success(res, rooms, "Lấy danh sách phòng thành công");
   } catch (err) {
