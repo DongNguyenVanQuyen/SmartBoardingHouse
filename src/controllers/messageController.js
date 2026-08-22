@@ -1,5 +1,6 @@
 const Message = require("../models/Message");
-const User = require("../models/Tenant");
+const Tenant = require("../models/Tenant");
+const User = Tenant;
 const { success, error: sendError } = require("../utils/response");
 
 const conversationRoom = (tenantId) => `conversation_${tenantId}`;
@@ -149,7 +150,26 @@ const sendMessage = async (req, res) => {
 
     const io = req.app.get("io");
     if (io) {
-      io.to(conversationRoom(tenantId)).emit("new_message", message);
+      const formattedMessage = {
+        _id: message._id,
+        id: message._id,
+        Id: message._id,
+        conversationId: message.conversationId,
+        ConversationId: message.conversationId,
+        senderRole: message.senderRole,
+        SenderRole: message.senderRole,
+        content: message.content,
+        Content: message.content,
+        type: message.type,
+        Type: message.type,
+        imageUrl: message.imageUrl,
+        ImageUrl: message.imageUrl,
+        isRead: message.isRead,
+        IsRead: message.isRead,
+        createdAt: message.createdAt,
+        CreatedAt: message.createdAt
+      };
+      io.to(conversationRoom(tenantId)).emit("new_message", formattedMessage);
     }
 
     return success(res, message, "Gửi tin nhắn thành công");

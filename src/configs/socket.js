@@ -83,7 +83,26 @@ const setupSocket = (io) => {
         });
 
         const room = conversationRoom(tenantId);
-        io.to(room).emit("new_message", message);
+        const formattedMessage = {
+          _id: message._id,
+          id: message._id,
+          Id: message._id,
+          conversationId: message.conversationId,
+          ConversationId: message.conversationId,
+          senderRole: message.senderRole,
+          SenderRole: message.senderRole,
+          content: message.content,
+          Content: message.content,
+          type: message.type,
+          Type: message.type,
+          imageUrl: message.imageUrl,
+          ImageUrl: message.imageUrl,
+          isRead: message.isRead,
+          IsRead: message.isRead,
+          createdAt: message.createdAt,
+          CreatedAt: message.createdAt
+        };
+        io.to(room).emit("new_message", formattedMessage);
         ack({ success: true, data: message });
 
         // Chỉ tạo Notification khi người NHẬN là Tenant (tức người gửi là Admin).

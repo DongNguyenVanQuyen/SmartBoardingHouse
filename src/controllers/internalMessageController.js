@@ -9,8 +9,30 @@ const pushMessage = async (req, res) => {
     const { message, tenantId } = req.body;
     if (!message || !tenantId) return sendError(res, "Thiếu message hoặc tenantId", 400);
 
+    const val = (camel, pascal) => message[camel] !== undefined ? message[camel] : message[pascal];
+
+    const formattedMessage = {
+      _id: val("_id", "Id") || val("id", "Id"),
+      id: val("_id", "Id") || val("id", "Id"),
+      Id: val("_id", "Id") || val("id", "Id"),
+      conversationId: val("conversationId", "ConversationId") || tenantId,
+      ConversationId: val("conversationId", "ConversationId") || tenantId,
+      senderRole: val("senderRole", "SenderRole"),
+      SenderRole: val("senderRole", "SenderRole"),
+      content: val("content", "Content"),
+      Content: val("content", "Content"),
+      type: val("type", "Type") || "Text",
+      Type: val("type", "Type") || "Text",
+      imageUrl: val("imageUrl", "ImageUrl"),
+      ImageUrl: val("imageUrl", "ImageUrl"),
+      isRead: val("isRead", "IsRead") !== undefined ? val("isRead", "IsRead") : false,
+      IsRead: val("isRead", "IsRead") !== undefined ? val("isRead", "IsRead") : false,
+      createdAt: val("createdAt", "CreatedAt") || new Date().toISOString(),
+      CreatedAt: val("createdAt", "CreatedAt") || new Date().toISOString(),
+    };
+
     const io = req.app.get("io");
-    if (io) io.to(conversationRoom(tenantId)).emit("new_message", message);
+    if (io) io.to(conversationRoom(tenantId)).emit("new_message", formattedMessage);
 
     return success(res, null, "Đã phát realtime");
   } catch (err) {
