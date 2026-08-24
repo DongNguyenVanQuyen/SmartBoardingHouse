@@ -19,14 +19,26 @@ const TenantSchema = new mongoose.Schema(
     phone: {
       type: String,
       trim: true,
-      match: [/^[0-9]{10,11}$/, "Số điện thoại không hợp lệ (phải là 10 - 11 số)"]
+      validate: {
+        validator: function(v) {
+          if (!v) return true;
+          return /^[0-9]{10,11}$/.test(v);
+        },
+        message: "Số điện thoại không hợp lệ (phải là 10 - 11 số)"
+      }
     },
     password: { type: String, required: true, minlength: 6 },
     avatar: { type: String, default: null },
     idCard: {
       type: String,
       trim: true,
-      match: [/^[0-9]{12}$/, "Số CCCD không hợp lệ (phải gồm chính xác 12 số)"]
+      validate: {
+        validator: function(v) {
+          if (!v) return true;
+          return /^[0-9]{12}$/.test(v);
+        },
+        message: "Số CCCD không hợp lệ (phải gồm chính xác 12 số)"
+      }
     },
     frontImage: { type: String, default: null },
     backImage: { type: String, default: null },
