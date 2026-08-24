@@ -343,8 +343,14 @@ const createMeterReading = async (req, res) => {
       );
     }
 
-    const itemFee = await require("../models/ItemFee").findOne({ type, isActive: true });
-    const defaultUnitPrice = itemFee ? itemFee.price : (type === "electric" ? 3500 : 8000);
+    const activeFees = await require("../models/ItemFee").find({ isActive: true });
+    const electricFee = activeFees.find(f => f.type === "electric" || (f.type === "mandatory" && f.name.toLowerCase().includes("điện")));
+    const waterFee = activeFees.find(f => f.type === "water" || (f.type === "mandatory" && f.name.toLowerCase().includes("nước")));
+    
+    let defaultUnitPrice = type === "electric" ? 3500 : 8000;
+    if (type === "electric" && electricFee) defaultUnitPrice = electricFee.price;
+    if (type === "water" && waterFee) defaultUnitPrice = waterFee.price;
+
     
     const reading = await MeterReading.create({
       tenant: req.user._id,

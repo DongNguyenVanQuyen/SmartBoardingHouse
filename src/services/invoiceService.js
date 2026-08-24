@@ -38,11 +38,10 @@ const generateInvoice = async (tenantId, roomId, contractId, month, year) => {
   // Lấy danh sách các phí cấu hình từ bảng ItemFee
   const activeFees = await ItemFee.find({ isActive: true });
 
-  // 🟢 FIX CỐT LÕI TẠI ĐÂY: Tự tính toán số tiêu thụ và thành tiền một cách tường minh
-  // (Tránh phụ thuộc vào reading.usage / reading.totalCost vì có thể là undefined)
-  // Lấy đơn giá điện/nước phòng hờ trường hợp reading thiếu unitPrice
-  const electricFee = activeFees.find(f => f.type === "electric");
-  const waterFee = activeFees.find(f => f.type === "water");
+  // 🟢 FIX CỐT LÕI TẠI ĐÂY:
+  // Hỗ trợ trường hợp Admin trên Web cấu hình phí Điện/Nước dưới dạng "mandatory"
+  const electricFee = activeFees.find(f => f.type === "electric" || (f.type === "mandatory" && f.name.toLowerCase().includes("Tiền Điện")));
+  const waterFee = activeFees.find(f => f.type === "water" || (f.type === "mandatory" && f.name.toLowerCase().includes("Tiền Nước")));
   const defaultElectricPrice = electricFee ? electricFee.price : 3500;
   const defaultWaterPrice = waterFee ? waterFee.price : 8000;
 
@@ -67,8 +66,14 @@ const generateInvoice = async (tenantId, roomId, contractId, month, year) => {
   const waterAmount = wCost;
 
   const items = [];
-  
+
   activeFees.forEach((fee) => {
+    // Bỏ qua phí điện và nước (vì đã được tính theo chỉ số tiêu thụ ở trên)
+    if ((electricFee && fee._id.toString() === electricFee._id.toString()) ||
+      (waterFee && fee._id.toString() === waterFee._id.toString())) {
+      return;
+    }
+
     if (fee.type === "mandatory") {
       items.push({
         name: fee.name,
