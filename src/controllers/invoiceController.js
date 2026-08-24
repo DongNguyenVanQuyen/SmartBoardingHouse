@@ -14,40 +14,12 @@ const getInvoices = async (req, res) => {
     if (month) filter.month = parseInt(month);
     if (type) filter.type = type;
 
-    // 🟢 SỬA LỖI TẠI ĐÂY: Lấy hóa đơn chính xác trong khoảng thời gian của hợp đồng
+    // 🟢 SỬA LỖI TẠI ĐÂY: Lấy hóa đơn chính xác theo hợp đồng
     if (contract && contract !== "all") {
       const selectedContract = await Contract.findById(contract);
       
       if (selectedContract) {
-        // Gắn điều kiện phải đúng phòng đó
-        filter.room = selectedContract.room;
-
-        if (selectedContract.startDate) {
-          // Lấy mốc thời gian bắt đầu và kết thúc của Hợp đồng
-          const startDate = new Date(selectedContract.startDate);
-          const endDate = selectedContract.endDate ? new Date(selectedContract.endDate) : new Date();
-
-          const startYear = startDate.getFullYear();
-          const startMonth = startDate.getMonth() + 1;
-          const endYear = endDate.getFullYear();
-          const endMonth = endDate.getMonth() + 1;
-
-          // Lọc hóa đơn có tháng/năm nằm lọt trong mốc thời gian này
-          filter.$or = [
-            { year: { $gt: startYear, $lt: endYear } },
-            {
-              year: startYear,
-              month: { 
-                $gte: startMonth, 
-                ...(startYear === endYear ? { $lte: endMonth } : {}) 
-              }
-            },
-            ...(startYear !== endYear ? [{ year: endYear, month: { $lte: endMonth } }] : [])
-          ];
-        } else {
-          // Fallback nếu hợp đồng bị thiếu ngày tháng
-          filter.contract = contract;
-        }
+        filter.contract = contract;
       } else {
         filter.contract = contract;
       }

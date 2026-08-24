@@ -39,6 +39,15 @@ const updateAvatar = async (req, res) => {
 const updateProfile = async (req, res) => {
   try {
     const { fullName, phone, address, idCard, frontImage, backImage } = req.body;
+    
+    // Kiểm tra định dạng khi người dùng cập nhật thông tin
+    if (phone && !/^[0-9]{10,11}$/.test(phone)) {
+      return sendError(res, "Số điện thoại không hợp lệ (phải là 10 - 11 số)", 400);
+    }
+    if (idCard && !/^[0-9]{12}$/.test(idCard)) {
+      return sendError(res, "Số CCCD không hợp lệ (phải gồm chính xác 12 số)", 400);
+    }
+
     const tenant = await Tenant.findByIdAndUpdate(
       req.user._id,
       { fullName, phone, address, idCard, frontImage, backImage },

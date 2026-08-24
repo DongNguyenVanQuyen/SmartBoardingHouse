@@ -20,7 +20,7 @@ const TenantSchema = new mongoose.Schema(
       type: String,
       trim: true,
       validate: {
-        validator: function(v) {
+        validator: function (v) {
           if (!v) return true;
           return /^[0-9]{10,11}$/.test(v);
         },
@@ -33,7 +33,7 @@ const TenantSchema = new mongoose.Schema(
       type: String,
       trim: true,
       validate: {
-        validator: function(v) {
+        validator: function (v) {
           if (!v) return true;
           return /^[0-9]{12}$/.test(v);
         },

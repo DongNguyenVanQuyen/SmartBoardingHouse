@@ -23,9 +23,17 @@ const register = async (req, res) => {
     const existing = await Tenant.findOne({ email });
     if (existing) return sendError(res, "Email đã được sử dụng", 400);
 
+    if (phone && !/^[0-9]{10,11}$/.test(phone)) {
+      return sendError(res, "Số điện thoại không hợp lệ (phải là 10 - 11 số)", 400);
+    }
+
+    if (idCard && !/^[0-9]{12}$/.test(idCard)) {
+      return sendError(res, "Số CCCD không hợp lệ (phải gồm chính xác 12 số)", 400);
+    }
+
     // Không nhận role từ req.body để tránh client tự phong Admin cho mình —
     // đăng ký công khai luôn tạo role mặc định "Tenant" (schema đã default sẵn).
-    const tenant = await Tenant.create({ fullName, email, phone, password });
+    const tenant = await Tenant.create({ fullName, email, password });
 
     const accessToken = generateAccessToken(tenant._id, tenant.role);
     const refreshToken = generateRefreshToken(tenant._id, tenant.role);
