@@ -35,13 +35,22 @@ const generateInvoice = async (tenantId, roomId, contractId, month, year) => {
     if (reading.type === "water") waterReading = reading;
   });
 
+  // Lấy danh sách các phí cấu hình từ bảng ItemFee
+  const activeFees = await ItemFee.find({ isActive: true });
+
   // 🟢 FIX CỐT LÕI TẠI ĐÂY: Tự tính toán số tiêu thụ và thành tiền một cách tường minh
   // (Tránh phụ thuộc vào reading.usage / reading.totalCost vì có thể là undefined)
+  // Lấy đơn giá điện/nước phòng hờ trường hợp reading thiếu unitPrice
+  const electricFee = activeFees.find(f => f.type === "electric");
+  const waterFee = activeFees.find(f => f.type === "water");
+  const defaultElectricPrice = electricFee ? electricFee.price : 3500;
+  const defaultWaterPrice = waterFee ? waterFee.price : 8000;
+
   let eUsage = 0, ePrice = 0, eCost = 0;
   if (electricReading) {
     eUsage = electricReading.currentReading - electricReading.previousReading;
     if (eUsage < 0) eUsage = 0; // Đề phòng chỉ số bị lùi
-    ePrice = electricReading.unitPrice || 3500;
+    ePrice = electricReading.unitPrice || defaultElectricPrice;
     eCost = eUsage * ePrice;
   }
 
@@ -49,7 +58,7 @@ const generateInvoice = async (tenantId, roomId, contractId, month, year) => {
   if (waterReading) {
     wUsage = waterReading.currentReading - waterReading.previousReading;
     if (wUsage < 0) wUsage = 0;
-    wPrice = waterReading.unitPrice || 8000;
+    wPrice = waterReading.unitPrice || defaultWaterPrice;
     wCost = wUsage * wPrice;
   }
 
@@ -58,9 +67,6 @@ const generateInvoice = async (tenantId, roomId, contractId, month, year) => {
   const waterAmount = wCost;
 
   const items = [];
-  
-  // Lấy danh sách các phí cấu hình từ bảng ItemFee
-  const activeFees = await ItemFee.find({ isActive: true });
   
   activeFees.forEach((fee) => {
     if (fee.type === "mandatory") {

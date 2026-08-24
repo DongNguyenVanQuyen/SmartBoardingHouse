@@ -9,6 +9,8 @@ const ItemFeeSchema = new mongoose.Schema(
     // "mandatory" = bắt buộc cho tất cả các phòng (ví dụ: Tiền rác)
     // "wifi" = chỉ áp dụng cho phòng đăng ký wifi (room.amenities chứa 'wifi')
     // "parking" = chỉ áp dụng cho phòng có gửi xe (room.amenities chứa 'parking')
+    // "electric" = đơn giá điện (dùng khi tính hóa đơn hoặc lưu chỉ số mới)
+    // "water" = đơn giá nước (dùng khi tính hóa đơn hoặc lưu chỉ số mới)
     type: {
       type: String,
       default: "mandatory",

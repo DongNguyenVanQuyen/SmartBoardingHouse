@@ -343,7 +343,9 @@ const createMeterReading = async (req, res) => {
       );
     }
 
-    const defaultUnitPrice = type === "electric" ? 3500 : 8000;
+    const itemFee = await require("../models/ItemFee").findOne({ type, isActive: true });
+    const defaultUnitPrice = itemFee ? itemFee.price : (type === "electric" ? 3500 : 8000);
+    
     const reading = await MeterReading.create({
       tenant: req.user._id,
       room: roomId,
