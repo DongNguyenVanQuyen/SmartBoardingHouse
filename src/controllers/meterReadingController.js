@@ -417,8 +417,8 @@ const updateMeterReading = async (req, res) => {
     }
 
     const activeFees = await require("../models/ItemFee").find({ isActive: true });
-    const electricFee = activeFees.find(f => f.type === "electric" || (f.type === "mandatory" && f.name.toLowerCase().includes("Tiền Điện")));
-    const waterFee = activeFees.find(f => f.type === "water" || (f.type === "mandatory" && f.name.toLowerCase().includes("Tiền Nước")));
+    const electricFee = activeFees.find(f => f.type === "electric" || (f.type === "mandatory" && f.name.toLowerCase().includes("điện")));
+    const waterFee = activeFees.find(f => f.type === "water" || (f.type === "mandatory" && f.name.toLowerCase().includes("nước")));
 
     let defaultUnitPrice = reading.type === "electric" ? 3500 : 8000;
     if (reading.type === "electric" && electricFee) defaultUnitPrice = electricFee.price;
