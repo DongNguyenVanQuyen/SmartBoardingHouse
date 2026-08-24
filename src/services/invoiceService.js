@@ -40,8 +40,8 @@ const generateInvoice = async (tenantId, roomId, contractId, month, year) => {
 
   // 🟢 FIX CỐT LÕI TẠI ĐÂY:
   // Hỗ trợ trường hợp Admin trên Web cấu hình phí Điện/Nước dưới dạng "mandatory"
-  const electricFee = activeFees.find(f => f.type === "electric" || (f.type === "mandatory" && f.name.toLowerCase().includes("Tiền Điện")));
-  const waterFee = activeFees.find(f => f.type === "water" || (f.type === "mandatory" && f.name.toLowerCase().includes("Tiền Nước")));
+  const electricFee = activeFees.find(f => f.type === "electric" || (f.type === "mandatory" && f.name.toLowerCase().includes("điện")));
+  const waterFee = activeFees.find(f => f.type === "water" || (f.type === "mandatory" && f.name.toLowerCase().includes("nước")));
   const defaultElectricPrice = electricFee ? electricFee.price : 3500;
   const defaultWaterPrice = waterFee ? waterFee.price : 8000;
 

@@ -256,11 +256,11 @@ const scanMeterImage = async (req, res) => {
         alreadySubmitted: !!existing,
         existing: existing
           ? {
-              id: existing._id,
-              currentReading: existing.currentReading,
-              imageUrl: existing.imageUrl,
-              readingDate: existing.readingDate,
-            }
+            id: existing._id,
+            currentReading: existing.currentReading,
+            imageUrl: existing.imageUrl,
+            readingDate: existing.readingDate,
+          }
           : null,
       },
       ocrResult.suggestedReading != null
@@ -346,12 +346,12 @@ const createMeterReading = async (req, res) => {
     const activeFees = await require("../models/ItemFee").find({ isActive: true });
     const electricFee = activeFees.find(f => f.type === "electric" || (f.type === "mandatory" && f.name.toLowerCase().includes("điện")));
     const waterFee = activeFees.find(f => f.type === "water" || (f.type === "mandatory" && f.name.toLowerCase().includes("nước")));
-    
+
     let defaultUnitPrice = type === "electric" ? 3500 : 8000;
     if (type === "electric" && electricFee) defaultUnitPrice = electricFee.price;
     if (type === "water" && waterFee) defaultUnitPrice = waterFee.price;
 
-    
+
     const reading = await MeterReading.create({
       tenant: req.user._id,
       room: roomId,
@@ -416,10 +416,18 @@ const updateMeterReading = async (req, res) => {
       );
     }
 
+    const activeFees = await require("../models/ItemFee").find({ isActive: true });
+    const electricFee = activeFees.find(f => f.type === "electric" || (f.type === "mandatory" && f.name.toLowerCase().includes("Tiền Điện")));
+    const waterFee = activeFees.find(f => f.type === "water" || (f.type === "mandatory" && f.name.toLowerCase().includes("Tiền Nước")));
+
+    let defaultUnitPrice = reading.type === "electric" ? 3500 : 8000;
+    if (reading.type === "electric" && electricFee) defaultUnitPrice = electricFee.price;
+    if (reading.type === "water" && waterFee) defaultUnitPrice = waterFee.price;
+
     reading.currentReading = finalCurrentReading;
     reading.imageUrl = finalImageUrl;
     reading.ocrRawText = ocrRawText || reading.ocrRawText;
-    reading.unitPrice = unitPrice ? parseFloat(unitPrice) : reading.unitPrice;
+    reading.unitPrice = unitPrice ? parseFloat(unitPrice) : defaultUnitPrice;
     reading.readingDate = new Date();
     await reading.save(); // pre-save hook tự tính lại usage + totalCost
 
