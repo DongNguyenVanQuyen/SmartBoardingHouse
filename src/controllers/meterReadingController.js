@@ -64,7 +64,7 @@ const runGeminiOCR = async (imageUrl) => {
       const res = await axios.post(
         `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${key}`,
         body,
-        { timeout: 30000 },
+        { timeout: 60000 },
       );
 
       const textPart =
@@ -97,9 +97,13 @@ const runGeminiOCR = async (imageUrl) => {
         lastError = "Hệ thống AI đang bị quá tải, vui lòng thử lại sau vài giây.";
       }
 
-      // Thử key tiếp theo nếu lỗi 429 (quota), 403 (cấm), 503 (quá tải), 500 (lỗi server)
+      if (err.code === 'ECONNABORTED' || lastError.includes("timeout")) {
+        lastError = "AI phản hồi quá chậm, vui lòng thử lại.";
+      }
+
+      // Thử key tiếp theo nếu lỗi 429 (quota), 403 (cấm), 503 (quá tải), 500 (lỗi server), hoặc timeout
       const status = err.response?.status;
-      if (status !== 429 && status !== 403 && status !== 503 && status !== 500)
+      if (status !== 429 && status !== 403 && status !== 503 && status !== 500 && err.code !== 'ECONNABORTED')
         throw new Error(`Gemini error: ${lastError}`);
     }
   }
