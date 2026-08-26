@@ -91,7 +91,7 @@ const runGeminiOCR = async (imageUrl) => {
       };
     } catch (err) {
       lastError = err.response?.data?.error?.message || err.message;
-      
+
       // Dịch lỗi 503 quá tải sang tiếng Việt cho thân thiện
       if (lastError.includes("high demand") || lastError.includes("overloaded")) {
         lastError = "Hệ thống AI đang bị quá tải, vui lòng thử lại sau vài giây.";
@@ -431,8 +431,8 @@ const updateMeterReading = async (req, res) => {
     }
 
     const activeFees = await require("../models/ItemFee").find({ isActive: true });
-    const electricFee = activeFees.find(f => f.type === "electric" || (["mandatory", "bắt buộc"].includes(f.type) && f.name.toLowerCase().includes("điện")));
-    const waterFee = activeFees.find(f => f.type === "water" || (["mandatory", "bắt buộc"].includes(f.type) && f.name.toLowerCase().includes("nước")));
+    const electricFee = activeFees.find(f => f.type === "electric" || (f.type === "mandatory" && f.name.toLowerCase().includes("Tiền Điện")));
+    const waterFee = activeFees.find(f => f.type === "water" || (f.type === "mandatory" && f.name.toLowerCase().includes("Tiền Nước")));
 
     let defaultUnitPrice = reading.type === "electric" ? 3500 : 8000;
     if (reading.type === "electric" && electricFee) defaultUnitPrice = electricFee.price;
