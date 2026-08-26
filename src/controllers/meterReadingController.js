@@ -14,16 +14,18 @@ const GEMINI_KEYS = [
 
 // env đặt tên "gemini-3-flash-preview" nhưng model thật trên AI Studio là "gemini-2.5-flash"
 // (gemini-3 chưa public) → fallback an toàn
-const GEMINI_MODEL = process.env.GEMINI_MODEL_NAME || "gemini-2.5-flash";
+const GEMINI_MODEL = process.env.GEMINI_MODEL_NAME || "gemini-1.5-flash";
 
 // ─── Gemini OCR ────────────────────────────────────────────────────────────────
 const runGeminiOCR = async (imageUrl) => {
   if (!GEMINI_KEYS.length)
     throw new Error("Chưa cấu hình GEMINI_API_KEY trong .env");
 
-  // Tải ảnh về buffer rồi gửi base64 cho Gemini
-  const { data: imageBuffer } = await axios.get(imageUrl, {
+  // Tải ảnh về buffer (Nén ảnh Cloudinary để nhận diện cực nhanh)
+  const optimizedImageUrl = imageUrl.replace('/upload/', '/upload/w_800,q_80/');
+  const { data: imageBuffer } = await axios.get(optimizedImageUrl, {
     responseType: "arraybuffer",
+    timeout: 10000,
   });
   const base64Image = Buffer.from(imageBuffer).toString("base64");
 
@@ -63,7 +65,7 @@ const runGeminiOCR = async (imageUrl) => {
       const res = await axios.post(
         `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${key}`,
         body,
-        { timeout: 30000 },
+        { timeout: 60000 },
       );
 
       const textPart =
@@ -83,9 +85,17 @@ const runGeminiOCR = async (imageUrl) => {
       };
     } catch (err) {
       lastError = err.response?.data?.error?.message || err.message;
-      // Thử key tiếp theo nếu lỗi 429 (quota) hoặc 403
+      
+      // Dịch lỗi nếu quá tải hoặc timeout
+      if (lastError.includes("high demand") || lastError.includes("overloaded")) {
+        lastError = "Hệ thống AI đang bị quá tải, vui lòng thử lại sau.";
+      } else if (err.code === 'ECONNABORTED' || lastError.includes("timeout")) {
+        lastError = "AI phản hồi chậm, vui lòng thử lại.";
+      }
+
+      // Thử key tiếp theo nếu lỗi 429 (quota), 403 (cấm), 503 (quá tải)
       const status = err.response?.status;
-      if (status !== 429 && status !== 403)
+      if (status !== 429 && status !== 403 && status !== 503 && err.code !== 'ECONNABORTED')
         throw new Error(`Gemini error: ${lastError}`);
     }
   }
