@@ -37,7 +37,7 @@ const runGeminiOCR = async (imageUrl) => {
               "Hãy đọc CHÍNH XÁC số chỉ số tiêu thụ hiển thị trên màn LCD hoặc mặt số cơ. " +
               "KHÔNG đọc điện áp (220V), tần số (50Hz), mã sản xuất, hay số in trên thân công tơ. " +
               "Nếu có dấu thập phân thì giữ nguyên (vd: 9985.3). " +
-              "Nếu không đọc rõ, trả reading = null. " +
+              "Nếu ảnh quá mờ không thể đọc, hoặc ảnh không phải là công tơ điện/nước, hãy trả reading = null và ghi rõ lý do vào 'note'. " +
               'Trả về JSON: { "reading": <number|null>, "note": "<mô tả ngắn>" }',
           },
           { inline_data: { mime_type: "image/jpeg", data: base64Image } },
@@ -75,11 +75,18 @@ const runGeminiOCR = async (imageUrl) => {
         /* bỏ qua */
       }
 
+      const suggestedReading =
+        typeof parsed.reading === "number" ? parsed.reading : null;
+      const note = parsed.note || "";
+
+      if (suggestedReading === null) {
+        console.log(`[Gemini OCR Warning] Không đọc được chỉ số. Lý do: ${note || "Không xác định"}`);
+      }
+
       return {
         rawText: textPart.slice(0, 500),
-        suggestedReading:
-          typeof parsed.reading === "number" ? parsed.reading : null,
-        note: parsed.note || "",
+        suggestedReading,
+        note,
       };
     } catch (err) {
       lastError = err.response?.data?.error?.message || err.message;
@@ -344,8 +351,8 @@ const createMeterReading = async (req, res) => {
     }
 
     const activeFees = await require("../models/ItemFee").find({ isActive: true });
-    const electricFee = activeFees.find(f => f.type === "electric" || (f.type === "mandatory" && f.name.toLowerCase().includes("điện")));
-    const waterFee = activeFees.find(f => f.type === "water" || (f.type === "mandatory" && f.name.toLowerCase().includes("nước")));
+    const electricFee = activeFees.find(f => f.type === "electric" || (["mandatory", "bắt buộc"].includes(f.type) && f.name.toLowerCase().includes("điện")));
+    const waterFee = activeFees.find(f => f.type === "water" || (["mandatory", "bắt buộc"].includes(f.type) && f.name.toLowerCase().includes("nước")));
 
     let defaultUnitPrice = type === "electric" ? 3500 : 8000;
     if (type === "electric" && electricFee) defaultUnitPrice = electricFee.price;
@@ -417,8 +424,8 @@ const updateMeterReading = async (req, res) => {
     }
 
     const activeFees = await require("../models/ItemFee").find({ isActive: true });
-    const electricFee = activeFees.find(f => f.type === "electric" || (f.type === "mandatory" && f.name.toLowerCase().includes("điện")));
-    const waterFee = activeFees.find(f => f.type === "water" || (f.type === "mandatory" && f.name.toLowerCase().includes("nước")));
+    const electricFee = activeFees.find(f => f.type === "electric" || (["mandatory", "bắt buộc"].includes(f.type) && f.name.toLowerCase().includes("điện")));
+    const waterFee = activeFees.find(f => f.type === "water" || (["mandatory", "bắt buộc"].includes(f.type) && f.name.toLowerCase().includes("nước")));
 
     let defaultUnitPrice = reading.type === "electric" ? 3500 : 8000;
     if (reading.type === "electric" && electricFee) defaultUnitPrice = electricFee.price;
