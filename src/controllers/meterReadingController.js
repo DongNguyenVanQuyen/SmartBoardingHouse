@@ -24,7 +24,6 @@ const runGeminiOCR = async (imageUrl) => {
   // Tải ảnh về buffer rồi gửi base64 cho Gemini
   const { data: imageBuffer } = await axios.get(imageUrl, {
     responseType: "arraybuffer",
-    timeout: 15000, // Thêm timeout 15 giây tránh treo khi tải ảnh
   });
   const base64Image = Buffer.from(imageBuffer).toString("base64");
 
@@ -38,7 +37,7 @@ const runGeminiOCR = async (imageUrl) => {
               "Hãy đọc CHÍNH XÁC số chỉ số tiêu thụ hiển thị trên màn LCD hoặc mặt số cơ. " +
               "KHÔNG đọc điện áp (220V), tần số (50Hz), mã sản xuất, hay số in trên thân công tơ. " +
               "Nếu có dấu thập phân thì giữ nguyên (vd: 9985.3). " +
-              "Nếu ảnh quá mờ không thể đọc, hoặc ảnh không phải là công tơ điện/nước, hãy trả reading = null và ghi rõ lý do vào 'note'. " +
+              "Nếu không đọc rõ, trả reading = null. " +
               'Trả về JSON: { "reading": <number|null>, "note": "<mô tả ngắn>" }',
           },
           { inline_data: { mime_type: "image/jpeg", data: base64Image } },
@@ -64,7 +63,7 @@ const runGeminiOCR = async (imageUrl) => {
       const res = await axios.post(
         `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${key}`,
         body,
-        { timeout: 60000 },
+        { timeout: 30000 },
       );
 
       const textPart =
@@ -76,38 +75,21 @@ const runGeminiOCR = async (imageUrl) => {
         /* bỏ qua */
       }
 
-      const suggestedReading =
-        typeof parsed.reading === "number" ? parsed.reading : null;
-      const note = parsed.note || "";
-
-      if (suggestedReading === null) {
-        console.log(`[Gemini OCR Warning] Không đọc được chỉ số. Lý do: ${note || "Không xác định"}`);
-      }
-
       return {
         rawText: textPart.slice(0, 500),
-        suggestedReading,
-        note,
+        suggestedReading:
+          typeof parsed.reading === "number" ? parsed.reading : null,
+        note: parsed.note || "",
       };
     } catch (err) {
       lastError = err.response?.data?.error?.message || err.message;
-
-      // Dịch lỗi 503 quá tải sang tiếng Việt cho thân thiện
-      if (lastError.includes("high demand") || lastError.includes("overloaded")) {
-        lastError = "Hệ thống AI đang bị quá tải, vui lòng thử lại sau vài giây.";
-      }
-
-      if (err.code === 'ECONNABORTED' || lastError.includes("timeout")) {
-        lastError = "AI phản hồi quá chậm, vui lòng thử lại.";
-      }
-
-      // Thử key tiếp theo nếu lỗi 429 (quota), 403 (cấm), 503 (quá tải), 500 (lỗi server), hoặc timeout
+      // Thử key tiếp theo nếu lỗi 429 (quota) hoặc 403
       const status = err.response?.status;
-      if (status !== 429 && status !== 403 && status !== 503 && status !== 500 && err.code !== 'ECONNABORTED')
+      if (status !== 429 && status !== 403)
         throw new Error(`Gemini error: ${lastError}`);
     }
   }
-  throw new Error(`Lỗi đọc ảnh: ${lastError}`);
+  throw new Error(`Gemini error (cả 2 key đều lỗi): ${lastError}`);
 };
 
 // ─── Helper ────────────────────────────────────────────────────────────────────
@@ -435,8 +417,8 @@ const updateMeterReading = async (req, res) => {
     }
 
     const activeFees = await require("../models/ItemFee").find({ isActive: true });
-    const electricFee = activeFees.find(f => f.type === "electric" || (f.type === "mandatory" && f.name.toLowerCase().includes("Tiền Điện")));
-    const waterFee = activeFees.find(f => f.type === "water" || (f.type === "mandatory" && f.name.toLowerCase().includes("Tiền Nước")));
+    const electricFee = activeFees.find(f => f.type === "electric" || (f.type === "mandatory" && f.name.toLowerCase().includes("điện")));
+    const waterFee = activeFees.find(f => f.type === "water" || (f.type === "mandatory" && f.name.toLowerCase().includes("nước")));
 
     let defaultUnitPrice = reading.type === "electric" ? 3500 : 8000;
     if (reading.type === "electric" && electricFee) defaultUnitPrice = electricFee.price;
