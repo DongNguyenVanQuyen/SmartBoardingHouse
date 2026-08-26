@@ -162,8 +162,19 @@ const generateInvoice = async (tenantId, roomId, contractId, month, year) => {
   }
 };
 
-const generateMonthlyInvoicesForAllRooms = async (month, year) => {
-  const activeContracts = await Contract.find({ status: "active" });
+const generateMonthlyInvoicesForAllRooms = async (month, year, day) => {
+  const query = { status: "active" };
+
+  if (day) {
+    const lastDayOfMonth = new Date(year, month, 0).getDate();
+    if (day === lastDayOfMonth) {
+      query.paymentDate = { $gte: day };
+    } else {
+      query.paymentDate = day;
+    }
+  }
+
+  const activeContracts = await Contract.find(query);
 
   const results = { success: 0, failed: [] };
 

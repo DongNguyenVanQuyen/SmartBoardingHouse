@@ -4,16 +4,17 @@ const {
   generateMonthlyInvoicesForAllRooms,
 } = require("../services/invoiceService");
 
-// Chạy lúc 0h00 ngày 15 hàng tháng (giờ Việt Nam)
+// Chạy lúc 0h00 hàng ngày (giờ Việt Nam)
 const startInvoiceGenerationJob = () => {
   cron.schedule(
-    "0 0 15 * *",
+    "0 0 * * *",
     async () => {
       const now = new Date();
       try {
         await generateMonthlyInvoicesForAllRooms(
           now.getMonth() + 1,
           now.getFullYear(),
+          now.getDate()
         );
       } catch (err) {
         console.error("[InvoiceGeneration] Lỗi khi chạy job:", err.message);
@@ -23,7 +24,7 @@ const startInvoiceGenerationJob = () => {
   );
 
   console.log(
-    "[InvoiceGeneration] Job đã được lên lịch (0h00 ngày 15 hàng tháng, GMT+7).",
+    "[InvoiceGeneration] Job đã được lên lịch (0h00 hàng ngày, GMT+7).",
   );
 };
 
