@@ -14,7 +14,7 @@ const GEMINI_KEYS = [
 
 // env đặt tên "gemini-3-flash-preview" nhưng model thật trên AI Studio là "gemini-2.5-flash"
 // (gemini-3 chưa public) → fallback an toàn
-const GEMINI_MODEL = process.env.GEMINI_MODEL_NAME || "gemini-1.5-flash";
+const GEMINI_MODEL = process.env.GEMINI_MODEL_NAME || "gemini-3.6-flash";
 
 // ─── Gemini OCR ────────────────────────────────────────────────────────────────
 const runGeminiOCR = async (imageUrl) => {
@@ -35,12 +35,14 @@ const runGeminiOCR = async (imageUrl) => {
         parts: [
           {
             text:
-              "Đây là ảnh công tơ điện hoặc nước. " +
-              "Hãy đọc CHÍNH XÁC số chỉ số tiêu thụ hiển thị trên màn LCD hoặc mặt số cơ. " +
-              "KHÔNG đọc điện áp (220V), tần số (50Hz), mã sản xuất, hay số in trên thân công tơ. " +
+              "Hãy phân tích hình ảnh này. " +
+              "1. Xác định xem đây có đúng là công tơ điện hoặc công tơ nước không (trả về isMeter). " +
+              "2. Kiểm tra xem chỉ số trên công tơ có bị mờ, nhoè, bị che khuất hoặc chói loá không thể đọc được không (trả về isReadable = true nếu đọc được, false nếu không). " +
+              "3. Nếu là công tơ và đọc được, hãy lấy CHÍNH XÁC số chỉ số tiêu thụ hiển thị trên màn LCD hoặc mặt số cơ (trả về reading). " +
+              "KHÔNG đọc điện áp (220V), tần số (50Hz), mã sản xuất, hay số in trên thân. " +
               "Nếu có dấu thập phân thì giữ nguyên (vd: 9985.3). " +
-              "Nếu không đọc rõ, trả reading = null. " +
-              'Trả về JSON: { "reading": <number|null>, "note": "<mô tả ngắn>" }',
+              "Nếu không phải công tơ hoặc không đọc được, để reading = null. " +
+              'Trả về JSON: { "isMeter": <boolean>, "isReadable": <boolean>, "reading": <number|null>, "note": "<lý do lỗi nếu có>" }',
           },
           { inline_data: { mime_type: "image/jpeg", data: base64Image } },
         ],
@@ -51,10 +53,12 @@ const runGeminiOCR = async (imageUrl) => {
       responseSchema: {
         type: "object",
         properties: {
+          isMeter: { type: "boolean" },
+          isReadable: { type: "boolean" },
           reading: { type: "number", nullable: true },
           note: { type: "string" },
         },
-        required: ["reading"],
+        required: ["isMeter", "isReadable", "reading"],
       },
     },
   };
@@ -77,6 +81,17 @@ const runGeminiOCR = async (imageUrl) => {
         /* bỏ qua */
       }
 
+      if (parsed.isMeter === false) {
+        const e = new Error("Hình ảnh không phải là công tơ điện/nước. Vui lòng chụp lại đúng công tơ.");
+        e.isValidation = true;
+        throw e;
+      }
+      if (parsed.isReadable === false) {
+        const e = new Error("Ảnh bị chói sáng, quá mờ hoặc bị che khuất không thể đọc được. Vui lòng chụp lại rõ nét hơn.");
+        e.isValidation = true;
+        throw e;
+      }
+
       return {
         rawText: textPart.slice(0, 500),
         suggestedReading:
@@ -84,8 +99,10 @@ const runGeminiOCR = async (imageUrl) => {
         note: parsed.note || "",
       };
     } catch (err) {
+      if (err.isValidation) throw err;
+
       lastError = err.response?.data?.error?.message || err.message;
-      
+
       // Dịch lỗi nếu quá tải hoặc timeout
       if (lastError.includes("high demand") || lastError.includes("overloaded")) {
         lastError = "Hệ thống AI đang bị quá tải, vui lòng thử lại sau.";
