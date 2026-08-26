@@ -12,8 +12,7 @@ const GEMINI_KEYS = [
   process.env.GEMINI_API_KEY_2,
 ].filter(Boolean);
 
-// env đặt tên "gemini-3-flash-preview" nhưng model thật trên AI Studio là "gemini-2.5-flash"
-// (gemini-3 chưa public) → fallback an toàn
+
 const GEMINI_MODEL = process.env.GEMINI_MODEL_NAME || "gemini-3.6-flash";
 
 // ─── Gemini OCR ────────────────────────────────────────────────────────────────
@@ -37,11 +36,11 @@ const runGeminiOCR = async (imageUrl) => {
             text:
               "Hãy phân tích hình ảnh này. " +
               "1. Xác định xem đây có đúng là công tơ điện hoặc công tơ nước không (trả về isMeter). " +
-              "2. Kiểm tra xem chỉ số trên công tơ có bị mờ, nhoè, bị che khuất hoặc chói loá không thể đọc được không (trả về isReadable = true nếu đọc được, false nếu không). " +
-              "3. Nếu là công tơ và đọc được, hãy lấy CHÍNH XÁC số chỉ số tiêu thụ hiển thị trên màn LCD hoặc mặt số cơ (trả về reading). " +
+              "2. Kiểm tra độ rõ nét: LƯU Ý RẤT QUAN TRỌNG, một công tơ thường có từ 4 đến 6 chữ số liền nhau. Bạn phải đọc được ĐẦY ĐỦ toàn bộ các chữ số này. Nếu ảnh bị chói, mờ, bị che khuất khiến bạn chỉ nhìn thấy 1 hoặc 2 số và không thể nhìn rõ các số còn lại, TUYỆT ĐỐI KHÔNG được trả về 1-2 số đó. Hãy đánh dấu là không thể đọc (trả về isReadable = false). " +
+              "3. Chỉ khi nào đọc được ĐỦ TOÀN BỘ CHỮ SỐ, hãy lấy CHÍNH XÁC chỉ số đó (trả về reading). " +
               "KHÔNG đọc điện áp (220V), tần số (50Hz), mã sản xuất, hay số in trên thân. " +
               "Nếu có dấu thập phân thì giữ nguyên (vd: 9985.3). " +
-              "Nếu không phải công tơ hoặc không đọc được, để reading = null. " +
+              "Nếu không phải công tơ hoặc không đọc đủ các số, để reading = null. " +
               'Trả về JSON: { "isMeter": <boolean>, "isReadable": <boolean>, "reading": <number|null>, "note": "<lý do lỗi nếu có>" }',
           },
           { inline_data: { mime_type: "image/jpeg", data: base64Image } },
