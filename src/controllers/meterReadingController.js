@@ -24,6 +24,7 @@ const runGeminiOCR = async (imageUrl) => {
   // Tải ảnh về buffer rồi gửi base64 cho Gemini
   const { data: imageBuffer } = await axios.get(imageUrl, {
     responseType: "arraybuffer",
+    timeout: 15000, // Thêm timeout 15 giây tránh treo khi tải ảnh
   });
   const base64Image = Buffer.from(imageBuffer).toString("base64");
 
@@ -90,13 +91,19 @@ const runGeminiOCR = async (imageUrl) => {
       };
     } catch (err) {
       lastError = err.response?.data?.error?.message || err.message;
-      // Thử key tiếp theo nếu lỗi 429 (quota) hoặc 403
+      
+      // Dịch lỗi 503 quá tải sang tiếng Việt cho thân thiện
+      if (lastError.includes("high demand") || lastError.includes("overloaded")) {
+        lastError = "Hệ thống AI đang bị quá tải, vui lòng thử lại sau vài giây.";
+      }
+
+      // Thử key tiếp theo nếu lỗi 429 (quota), 403 (cấm), 503 (quá tải), 500 (lỗi server)
       const status = err.response?.status;
-      if (status !== 429 && status !== 403)
+      if (status !== 429 && status !== 403 && status !== 503 && status !== 500)
         throw new Error(`Gemini error: ${lastError}`);
     }
   }
-  throw new Error(`Gemini error (cả 2 key đều lỗi): ${lastError}`);
+  throw new Error(`Lỗi đọc ảnh: ${lastError}`);
 };
 
 // ─── Helper ────────────────────────────────────────────────────────────────────
@@ -351,8 +358,8 @@ const createMeterReading = async (req, res) => {
     }
 
     const activeFees = await require("../models/ItemFee").find({ isActive: true });
-    const electricFee = activeFees.find(f => f.type === "electric" || (["mandatory", "bắt buộc"].includes(f.type) && f.name.toLowerCase().includes("điện")));
-    const waterFee = activeFees.find(f => f.type === "water" || (["mandatory", "bắt buộc"].includes(f.type) && f.name.toLowerCase().includes("nước")));
+    const electricFee = activeFees.find(f => f.type === "electric" || (f.type === "mandatory" && f.name.toLowerCase().includes("điện")));
+    const waterFee = activeFees.find(f => f.type === "water" || (f.type === "mandatory" && f.name.toLowerCase().includes("nước")));
 
     let defaultUnitPrice = type === "electric" ? 3500 : 8000;
     if (type === "electric" && electricFee) defaultUnitPrice = electricFee.price;
